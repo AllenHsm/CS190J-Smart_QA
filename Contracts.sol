@@ -28,6 +28,8 @@ contract SurveyList {
         string content;
         string[] options;
         bool q_isfull;
+        uint start_time;
+        uint end_time;
     }
     
     struct Participant{
@@ -57,6 +59,9 @@ contract SurveyList {
     event QuestionCreated(uint id, string _content, string[] answer);
     event SurveyCreated(uint id, string _title, uint particapant_number, bool s_isfull);
     event ParticipantCreated(address p_address, string name, uint age , bool isfull);
+    event AnswerCreated(uint answer_id, address who_participated, uint survey_id, string[] a_answer, bool isSelected);
+    event EndorsementCreated(uint endorsement_id, address who_endorsed, uint survey_id, uint question_id);
+
     
     // ---------- Mappings to save relevant data for Question, Survey, Participant, Answer, Endorsement ----------
     mapping(uint => Question) public questions;
@@ -119,7 +124,11 @@ contract SurveyList {
 
     modifier endorsedBefore(address _address, uint QuestionId, uint AnswerId){
         bool flag = true;
-        // if {}
+        for (uint i = 0; i < endorsements_of_question[QuestionId].length; i++){
+            if(endorsements_of_question[QuestionId][i] == AnswerId){
+                flag = false;
+            }
+        }
         require(flag, "You have endorsed this answer before!"); 
         _; 
     }
@@ -167,9 +176,17 @@ contract SurveyList {
     }
     
     function EndorseAnswer(uint answer, uint QuestionId) public{
-        // endorsements_of_question.push();
+        require(answers[answer].who_participated == msg.sender, "You can't endorse this answer!");
+        require(answers[answer].isSelected == false, "You have already endorsed this answer!");
+        endorsements[EndorsementCount] = Endorsement(EndorsementCount, msg.sender, answers[answer].survey_id, QuestionId);
+        endorsements_of_question[QuestionId].push(answer);
+        answers[answer].isSelected = true; 
+        EndorsementCount++;
+        emit EndorsementCreated(EndorsementCount, msg.sender, answers[answer].survey_id, QuestionId);
     }
-    
+    function AdwardEther(address _address, uint amount) public ownerOnly {
+        payable(_address).transfer(amount);
+    }
     
     // ---------- Getter functions ----------
     
@@ -208,5 +225,10 @@ contract SurveyList {
     function participantsJoinedSurveys(address _address) public view returns (uint[] memory data){
         return surveylist_of_participant[_address];
     }
+    function getEndorsement(uint id) public view returns (address, uint, uint){
+        Endorsement memory endorsement = endorsements[id];
+        return (endorsement.who_endorsed, endorsement.survey_id, endorsement.question_id);
+    }
+
     
 }
