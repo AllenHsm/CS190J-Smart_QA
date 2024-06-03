@@ -22,6 +22,7 @@ contract SmartQA {
     uint256 public questionCount = 0;
     uint256 public userCount = 0;
     uint256 public answerCount = 0;
+    uint256 private balance = 0;
     // Event declaration
 
     // Structs for data models
@@ -49,8 +50,9 @@ contract SmartQA {
         address[] endorsers;
     }
 
-    constructor() {
+    constructor() payable {
         owner = msg.sender;
+        balance = msg.value;
     }
     //  -------------------------------------------- events  --------------------------------------------
     event QuestionCreated(
@@ -64,11 +66,27 @@ contract SmartQA {
     );
 
     event UserRegistered(string username, address userAddress);
-    event AnswerCreated(uint256 a_id, string content, uint256 reward);
+    event AnswerCreated(
+        uint256 q_id,
+        uint256 a_id,
+        string content,
+        uint256 reward
+    );
     event Endorse(uint256 a_id, address endorser, uint256 q_id);
     event AnswerSelected(uint256 q_id, uint256 a_id);
     event QuestionClosed(uint256 q_id);
     event MoneyReceived(address payer, uint256 value);
+    event CheckExpiration(
+        uint256 curr_ts,
+        uint256 expiration_time,
+        bool isClosedByPoster
+    );
+    event RewardDistributed(
+        uint256 q_id,
+        uint256[] a_ids,
+        uint256[] receipients,
+        uint256 average_reward
+    );
     //  -------------------------------------------- modifiers  --------------------------------------------
     modifier isRegistered(address addr) {
         bool flag = true;
@@ -111,7 +129,7 @@ contract SmartQA {
     ) public view returns (Question[] memory) {
         Question[] memory userQuestions;
         uint256 count = 0;
-        for (uint i = 0; i < questionCount; i++) {
+        for (uint i = 1; i <= questionCount; i++) {
             if (questionMap[i].asker == addr) {
                 userQuestions[count] = questionMap[i];
                 count++;
@@ -132,44 +150,54 @@ contract SmartQA {
         return (question.content, question.reward, question.expiration_time);
     }
     function getAnswers(uint256 a_id) public view returns (string memory) {
-        require(a_id < answerCount, "The input answer id is invalid");
+        require(a_id <= answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return (answer.content);
     }
     function getNumOfEndorse(uint256 a_id) public view returns (uint256) {
-        require(a_id < answerCount, "The input answer id is invalid");
+        require(a_id <= answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return (answer.endorsers.length);
     }
     function isAnswerSelected(uint a_id) public view returns (bool) {
-        require(a_id < answerCount, "The input answer id is invalid");
+        require(a_id <= answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return answer.isSelected;
     }
     function getDuration(uint256 q_id) public view returns (uint256) {
-        require(q_id < questionCount, "The input question id is invalid");
+        require(q_id <= questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
         return (question.expiration_time);
     }
     function getParticipantCount(uint256 q_id) public view returns (uint256) {
-        require(q_id < questionCount, "The input question id is invalid");
+        require(q_id <= questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
         return question.answer_ids.length;
     }
     function getParticipantAddr() public view returns (address) {
         return msg.sender;
     }
-    function isExpired(uint256 q_id) public view returns (bool) {
-        require(q_id < questionCount, "The input question id is invalid");
+    function isExpired(uint256 q_id) public returns (bool) {
+        require(q_id <= questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
+        emit CheckExpiration(
+            block.timestamp,
+            question.expiration_time,
+            question.closed
+        );
         return ((block.timestamp > question.expiration_time) ||
             question.closed);
     }
     // ------------------------------------------- Update functions ----------------------------------------------
+    // todo 校验a_id, q_id 功能有问题 校验是否为poster answer id 是否归属于此question id
     function selectAnswer(uint256 q_id, uint256 a_id, bool giveReward) public {
         require(
             hasRegistered[msg.sender],
             "User must be registered to select an answer"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can select the best answer"
         );
         uint256[] memory answerIds = questionMap[q_id].answer_ids;
         for (uint256 i = 0; i < answerIds.length; i++) {
@@ -184,10 +212,16 @@ contract SmartQA {
         }
         emit AnswerSelected(q_id, a_id);
     }
+
+    // 校验question id 是否存在，question是否属于此地址
     function closeQuestion(uint256 q_id) public {
         require(
             hasRegistered[msg.sender],
             "User must be registered to close a question"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can close the question"
         );
         require(
             !questionMap[q_id].closed,
@@ -213,12 +247,15 @@ contract SmartQA {
     }
 
     function askQuestion(
-        // todo: A survey owner can close the survey or wait for it to close after the expiry block timestamp or when it reaches the maximum accepted data points. When a survey is closed, certain reward in ETH will be sent to the users participating in it.
         string memory _content,
         uint256 _day,
         uint256 _hour,
         uint256 _min
     ) external payable returns (uint256) {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to ask a question"
+        );
         require(msg.value > 0, "Reward must be greater than 0");
         require(bytes(_content).length > 0, "Question content cannot be empty");
         // require(
@@ -238,9 +275,9 @@ contract SmartQA {
             new uint256[](0)
         );
         questions.push(newQuestion);
-
+        questionMap[question_id] = newQuestion;
         emit MoneyReceived(msg.sender, msg.value);
-        emit AnswerCreated(question_id, _content, msg.value);
+
         return question_id;
     }
 
@@ -265,6 +302,7 @@ contract SmartQA {
     }
 
     function postAnswer(
+        // todo: 不能回答一个问题两次
         uint256 question_id,
         string memory content
     ) public returns (uint256) {
@@ -274,6 +312,10 @@ contract SmartQA {
             "User must be registered to answer a question"
         );
         require(bytes(content).length > 0, "Answer content cannot be empty");
+        require(
+            questionMap[question_id].asker != msg.sender,
+            "You cannot answer your own question!"
+        );
         address[] memory endorsers;
         uint256 answer_id = ++answerCount;
         Answer memory newAnswer = Answer(
@@ -289,9 +331,17 @@ contract SmartQA {
         if (questionMap[question_id].answer_ids.length == 50) {
             closeQuestion(question_id);
         }
+
+        emit AnswerCreated(
+            question_id,
+            answer_id,
+            content,
+            questionMap[question_id].reward
+        );
         return answer_id;
     }
 
+    // todo: answer id 是否归属于此question
     function endorse(uint256 answer_id, uint256 question_id) external {
         require(!isExpired(question_id), "This question is closed");
         require(
@@ -301,6 +351,10 @@ contract SmartQA {
         require(
             questionMap[question_id].answer_ids.length > 0,
             "There is no answer to endorse"
+        );
+        require(
+            answerMap[answer_id].answerer != msg.sender,
+            "You cannot endorse your own answer"
         );
         address[] memory ansEndorsers = answerMap[answer_id].endorsers;
         bool hasEndorsed = false;
@@ -314,7 +368,7 @@ contract SmartQA {
         emit Endorse(answer_id, msg.sender, question_id);
         answerMap[answer_id].endorsers.push(msg.sender);
     }
-    function rewardDistribute(uint256 question_id, address recipient) internal {
+    function rewardDistribute(uint256 question_id, address recipient) private {
         require(
             hasRegistered[msg.sender],
             "User must be registered to distribute reward"
@@ -330,7 +384,11 @@ contract SmartQA {
         uint256 reward = questionMap[question_id].reward;
         (bool r, ) = recipient.call{value: reward}("");
         require(r, "Failed to transfer the reward.");
+
+        // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        balance += msg.value;
+    }
 }
