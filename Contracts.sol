@@ -52,12 +52,19 @@ contract SmartQA {
         owner = msg.sender;
     }
     //  -------------------------------------------- events  --------------------------------------------
-    event QuestionCreated (address asker, string content, uint256 reward, uint256 expiration_time, 
-                            uint256 question_id, bool closed, uint256[] answer_ids); 
-    event AnswerCreated (uint256 a_id, string content, address answerer);
-    event Endorse (uint256 a_id, address endorser);
-    event AnswerSelected (uint256 a_id);
-    event QuestionClosed (uint256 q_id);
+    event QuestionCreated(
+        address asker,
+        string content,
+        uint256 reward,
+        uint256 expiration_time,
+        uint256 question_id,
+        bool closed,
+        uint256[] answer_ids
+    );
+    event AnswerCreated(uint256 a_id, string content, address answerer);
+    event Endorse(uint256 a_id, address endorser);
+    event AnswerSelected(uint256 a_id);
+    event QuestionClosed(uint256 q_id);
     //  -------------------------------------------- modifiers  --------------------------------------------
     modifier isRegistered(address addr) {
         bool flag = true;
@@ -95,7 +102,9 @@ contract SmartQA {
     }
 
     //  -------------------------------------------- Accesser  --------------------------------------------
-    function getUserQuestions (address addr) public view returns (Question[] memory) {
+    function getUserQuestions(
+        address addr
+    ) public view returns (Question[] memory) {
         Question[] memory userQuestions;
         uint256 count = 0;
         for (uint i = 0; i < questionCount; i++) {
@@ -107,35 +116,49 @@ contract SmartQA {
         return userQuestions;
     }
     function getQuestion(uint256 q_id) public view returns (string memory) {
+        // user should not call this
+        require(q_id <= questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
         return (question.content);
     }
     function getAnswers(uint256 a_id) public view returns (string memory) {
+        require(a_id < answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return (answer.content);
     }
     function getNumOfEndorse(uint256 a_id) public view returns (uint256) {
+        require(a_id < answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return (answer.endorsers.length);
     }
     function isAnswerSelected(uint a_id) public view returns (bool) {
+        require(a_id < answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return answer.isSelected;
     }
     function getDuration(uint256 q_id) public view returns (uint256) {
+        require(q_id < questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
         return (question.expiration_time);
     }
     function getParticipantCount(uint256 q_id) public view returns (uint256) {
+        require(q_id < questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
         return question.answer_ids.length;
     }
-    function getParticipantAddr () public view returns (address){
-        return msg.sender; 
+    function getParticipantAddr() public view returns (address) {
+        return msg.sender;
     }
     function getNumOfEndorsement(uint256 a_id) public view returns (uint256) {
+        require(a_id < answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
         return answer.endorsers.length;
+    }
+    function isExpired(uint256 q_id) public view returns (bool) {
+        require(q_id < questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        return ((block.timestamp > question.expiration_time) ||
+            question.closed);
     }
     // ------------------------------------------- Update functions ----------------------------------------------
     function selectAnswer(uint256 q_id, uint256 a_id) public {
@@ -179,10 +202,13 @@ contract SmartQA {
     }
 
     function askQuestion(
+        // todo: duration input should be day, hour, minutes respectively and convert to seconds
         string memory _content,
         uint256 _reward,
-        uint256 _expirationTime
-    ) public returns (uint256) {
+        uint256 _day,
+        uint256 _hour,
+        uint256 _min
+    ) public payable returns (uint256) {
         require(
             hasRegistered[msg.sender],
             "User must be registered to ask a question"
@@ -190,6 +216,7 @@ contract SmartQA {
         require(_reward > 0, "Reward must be greater than 0");
         require(bytes(_content).length > 0, "Question content cannot be empty");
         uint256 question_id = ++questionCount;
+        uint256 _expirationTime = _day * 86400 + _hour * 3600 + _min * 60;
         Question memory newQuestion = Question(
             msg.sender,
             _content,
@@ -208,6 +235,10 @@ contract SmartQA {
         string memory content
     ) public returns (uint256) {
         require(
+            !isExpired(question_id),
+            "This question is closed"
+        );
+        require(
             hasRegistered[msg.sender],
             "User must be registered to answer a question"
         );
@@ -224,13 +255,11 @@ contract SmartQA {
         );
         answerMap[answer_id] = newAnswer;
         questionMap[question_id].answer_ids.push(answer_id);
-        return answer_id; 
+        return answer_id;
     }
 
-    function endorse(
-        uint256 answer_id,
-        uint256 question_id
-    ) public {
+    function endorse(uint256 answer_id, uint256 question_id) public {
+        require(!isExpired(question_id), "This question is closed");
         require(
             hasRegistered[msg.sender],
             "User must be registered to add endorsements"
@@ -246,10 +275,7 @@ contract SmartQA {
                 hasEndorsed = true;
             }
         }
-        require(
-            !hasEndorsed,
-            "User can not endorse an answer twice"
-        );
+        require(!hasEndorsed, "User can not endorse an answer twice");
 
         answerMap[answer_id].endorsers.push(msg.sender);
     }
