@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.1;
 
+import "./ReentrancyGuard.sol";
+import {Test, console2} from "forge-std/Test.sol";
+
 contract SmartQA {
     address public owner;
     User[] public users;
     string[] public accountNames;
+    Question[] public questions;
 
     // State mappings
     mapping(address => User) public userAddrMap;
@@ -47,8 +51,6 @@ contract SmartQA {
     constructor() {
         owner = msg.sender;
     }
-    Question[] public questions;
-
     //  -------------------------------------------- events  --------------------------------------------
     event QuestionCreated (address asker, string content, uint256 reward, uint256 expiration_time, 
                             uint256 question_id, bool closed, uint256[] answer_ids); 
@@ -93,6 +95,17 @@ contract SmartQA {
     }
 
     //  -------------------------------------------- Accesser  --------------------------------------------
+    function getUserQuestions (address addr) public view returns (Question[] memory) {
+        Question[] memory userQuestions;
+        uint256 count = 0;
+        for (uint i = 0; i < questionCount; i++) {
+            if (questionMap[i].asker == addr) {
+                userQuestions[count] = questionMap[i];
+                count++;
+            }
+        }
+        return userQuestions;
+    }
     function getQuestion(uint256 q_id) public view returns (string memory) {
         Question memory question = questionMap[q_id];
         return (question.content);
@@ -169,38 +182,38 @@ contract SmartQA {
         string memory _content,
         uint256 _reward,
         uint256 _expirationTime
-    ) public {
+    ) public returns (uint256) {
         require(
             hasRegistered[msg.sender],
             "User must be registered to ask a question"
         );
         require(_reward > 0, "Reward must be greater than 0");
         require(bytes(_content).length > 0, "Question content cannot be empty");
-
+        uint256 question_id = ++questionCount;
         Question memory newQuestion = Question(
             msg.sender,
             _content,
             _reward,
             block.timestamp + _expirationTime,
-            questionCount,
+            question_id,
             false,
             new uint256[](0)
         );
         questions.push(newQuestion);
-        questionCount++;
+        return question_id;
     }
 
     function postAnswer(
-        uint256 answer_id,
         uint256 question_id,
         string memory content
-    ) public {
+    ) public returns (uint256) {
         require(
             hasRegistered[msg.sender],
             "User must be registered to answer a question"
         );
         require(bytes(content).length > 0, "Answer content cannot be empty");
         address[] memory endorsers;
+        uint256 answer_id = ++answerCount;
         Answer memory newAnswer = Answer(
             msg.sender,
             answer_id,
@@ -211,7 +224,7 @@ contract SmartQA {
         );
         answerMap[answer_id] = newAnswer;
         questionMap[question_id].answer_ids.push(answer_id);
-        answerCount++;
+        return answer_id; 
     }
 
     function endorse(
