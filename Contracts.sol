@@ -49,6 +49,13 @@ contract SmartQA {
     }
     Question[] public questions;
 
+    //  -------------------------------------------- events  --------------------------------------------
+    event QuestionCreated (address asker, string content, uint256 reward, uint256 expiration_time, 
+                            uint256 question_id, bool closed, uint256[] answer_ids); 
+    event AnswerCreated (uint256 a_id, string content, address answerer);
+    event Endorse (uint256 a_id, address endorser);
+    event AnswerSelected (uint256 a_id);
+    event QuestionClosed (uint256 q_id);
     //  -------------------------------------------- modifiers  --------------------------------------------
     modifier isRegistered(address addr) {
         bool flag = true;
@@ -106,7 +113,7 @@ contract SmartQA {
         Question memory question = questionMap[q_id];
         return (question.expiration_time);
     }
-    function getParticipantCount(uint q_id) public view returns (uint256) {
+    function getParticipantCount(uint256 q_id) public view returns (uint256) {
         Question memory question = questionMap[q_id];
         return question.answer_ids.length;
     }
@@ -118,17 +125,28 @@ contract SmartQA {
         return answer.endorsers.length;
     }
     // ------------------------------------------- Update functions ----------------------------------------------
-    function selectAnswer(uint256 a_id) public {
+    function selectAnswer(uint256 q_id, uint256 a_id) public {
         require(
             hasRegistered[msg.sender],
             "User must be registered to select an answer"
         );
+        uint256[] memory answerIds = questionMap[q_id].answer_ids;
+        for (uint256 i = 0; i < answerIds.length; i++) {
+            if (answerMap[answerIds[i]].isSelected == true) {
+                answerMap[answerIds[i]].isSelected = false;
+                break;
+            }
+        }
         answerMap[a_id].isSelected = true;
     }
     function closeQuestion(uint256 q_id) public {
         require(
             hasRegistered[msg.sender],
             "User must be registered to close a question"
+        );
+        require(
+            !questionMap[q_id].closed,
+            "The question has already been closed"
         );
         questionMap[q_id].closed = true;
     }
@@ -222,6 +240,4 @@ contract SmartQA {
 
         answerMap[answer_id].endorsers.push(msg.sender);
     }
-
-    
 }
