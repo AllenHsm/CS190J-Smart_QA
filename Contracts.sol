@@ -195,6 +195,9 @@ contract SmartQA {
             hasRegistered[msg.sender],
             "User must be registered to select an answer"
         );
+        require (
+            queationMap[q_id] == ;
+        );
         require(
             questionMap[q_id].asker == msg.sender,
             "Only the asker can select the best answer"
