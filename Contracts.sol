@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.1;
 
-import "./ReentrancyGuard.sol";
-import {Test, console2} from "forge-std/Test.sol";
 
 // If 1 ether = $3500, $5 = 0.001428 ether = 1.428 * 10^15
 
@@ -22,7 +20,7 @@ contract SmartQA {
     uint256 public questionCount = 0;
     uint256 public userCount = 0;
     uint256 public answerCount = 0;
-    uint256 private balance = 0;
+    uint256 private  balance = 0; 
     // Event declaration
 
     // Structs for data models
@@ -50,7 +48,7 @@ contract SmartQA {
         address[] endorsers;
     }
 
-    constructor() payable {
+    constructor() payable  {
         owner = msg.sender;
         balance = msg.value;
     }
@@ -66,27 +64,13 @@ contract SmartQA {
     );
 
     event UserRegistered(string username, address userAddress);
-    event AnswerCreated(
-        uint256 q_id,
-        uint256 a_id,
-        string content,
-        uint256 reward
-    );
+    event AnswerCreated(uint256 q_id, uint256 a_id, string content, uint256 reward);
     event Endorse(uint256 a_id, address endorser, uint256 q_id);
     event AnswerSelected(uint256 q_id, uint256 a_id);
     event QuestionClosed(uint256 q_id);
     event MoneyReceived(address payer, uint256 value);
-    event CheckExpiration(
-        uint256 curr_ts,
-        uint256 expiration_time,
-        bool isClosedByPoster
-    );
-    event RewardDistributed(
-        uint256 q_id,
-        uint256[] a_ids,
-        uint256[] receipients,
-        uint256 average_reward
-    );
+    event CheckExpiration(uint256 curr_ts, uint256 expiration_time, bool isClosedByPoster); 
+    event RewardDistributed(uint256 q_id, uint256[] a_ids, uint256[] receipients, uint256 average_reward); 
     //  -------------------------------------------- modifiers  --------------------------------------------
     modifier isRegistered(address addr) {
         bool flag = true;
@@ -169,7 +153,7 @@ contract SmartQA {
         Question memory question = questionMap[q_id];
         return (question.expiration_time);
     }
-    function getParticipantCount(uint256 q_id) public view returns (uint256) {
+    function getParticipantCount(uint256 q_id) public view returns (uint256) { 
         require(q_id <= questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
         return question.answer_ids.length;
@@ -177,14 +161,10 @@ contract SmartQA {
     function getParticipantAddr() public view returns (address) {
         return msg.sender;
     }
-    function isExpired(uint256 q_id) public returns (bool) {
+    function isExpired(uint256 q_id) public  returns (bool) {
         require(q_id <= questionCount, "The input question id is invalid");
         Question memory question = questionMap[q_id];
-        emit CheckExpiration(
-            block.timestamp,
-            question.expiration_time,
-            question.closed
-        );
+        emit CheckExpiration(block.timestamp, question.expiration_time, question.closed); 
         return ((block.timestamp > question.expiration_time) ||
             question.closed);
     }
@@ -194,9 +174,6 @@ contract SmartQA {
         require(
             hasRegistered[msg.sender],
             "User must be registered to select an answer"
-        );
-        require (
-            queationMap[q_id] == ;
         );
         require(
             questionMap[q_id].asker == msg.sender,
@@ -216,7 +193,7 @@ contract SmartQA {
         emit AnswerSelected(q_id, a_id);
     }
 
-    // 校验question id 是否存在，question是否属于此地址
+    // todo: 校验question id 是否存在，question是否属于此地址
     function closeQuestion(uint256 q_id) public {
         require(
             hasRegistered[msg.sender],
@@ -278,9 +255,9 @@ contract SmartQA {
             new uint256[](0)
         );
         questions.push(newQuestion);
-        questionMap[question_id] = newQuestion;
+        questionMap[question_id] = newQuestion; 
         emit MoneyReceived(msg.sender, msg.value);
-
+        
         return question_id;
     }
 
@@ -304,8 +281,7 @@ contract SmartQA {
         require(r, "The money is not returned successfully");
     }
 
-    function postAnswer(
-        // todo: 不能回答一个问题两次
+    function postAnswer( // todo: 不能回答一个问题两次.    finish
         uint256 question_id,
         string memory content
     ) public returns (uint256) {
@@ -319,6 +295,14 @@ contract SmartQA {
             questionMap[question_id].asker != msg.sender,
             "You cannot answer your own question!"
         );
+        bool answered_before = false;
+        for (uint256 i = 0; i <= questionMap[question_id].answer_ids.length; i ++){
+            uint256 a_id = questionMap[question_id].answer_ids[i]; 
+            if (answerMap[a_id].answerer == msg.sender){
+                answered_before = true;
+            }
+        }
+        require(!answered_before, "You cannot answer the same question twice");
         address[] memory endorsers;
         uint256 answer_id = ++answerCount;
         Answer memory newAnswer = Answer(
@@ -335,16 +319,12 @@ contract SmartQA {
             closeQuestion(question_id);
         }
 
-        emit AnswerCreated(
-            question_id,
-            answer_id,
-            content,
-            questionMap[question_id].reward
-        );
+        emit AnswerCreated(question_id, answer_id, content, questionMap[question_id].reward);
         return answer_id;
     }
 
-    // todo: answer id 是否归属于此question
+
+    // todo: answer id 是否归属于此question.  // finish
     function endorse(uint256 answer_id, uint256 question_id) external {
         require(!isExpired(question_id), "This question is closed");
         require(
@@ -358,6 +338,17 @@ contract SmartQA {
         require(
             answerMap[answer_id].answerer != msg.sender,
             "You cannot endorse your own answer"
+        );
+        bool a_belong_to_q = false;
+        for (uint256 i = 0; i <= questionMap[question_id].answer_ids.length; i ++){
+            uint256 a_id = questionMap[question_id].answer_ids[i]; 
+            if (a_id == answer_id){
+                a_belong_to_q = true;
+            }
+        }
+        require(
+            a_belong_to_q,
+            "The answer you want to endorse does not belong to this question"
         );
         address[] memory ansEndorsers = answerMap[answer_id].endorsers;
         bool hasEndorsed = false;
@@ -387,11 +378,11 @@ contract SmartQA {
         uint256 reward = questionMap[question_id].reward;
         (bool r, ) = recipient.call{value: reward}("");
         require(r, "Failed to transfer the reward.");
-
-        // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
+        
+        // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward); 
     }
 
     receive() external payable {
-        balance += msg.value;
+        balance += msg.value ; 
     }
 }
