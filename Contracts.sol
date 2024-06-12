@@ -1,212 +1,506 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.1;
 
-contract SurveyList {
-    
-    address owner;
-    string[] public survey_titles;
-    address[] participant_list;
-    string[] accountNames; 
-    
-    // These are for our models' ids.
-    uint public SurveyCount = 0;
-    uint public questionCount = 0;
-    uint public ParticipantCount = 0;
-    uint public AnswerCount = 0;
-    uint public EndorsementCount = 0;
+import "./ReentrancyGuard.sol";
+import {Test, console2} from "forge-std/Test.sol";
 
-    // ---------- These are our models. Such as Survey, Question, Participant, Answer ----------
-    struct Survey{
-        uint id;
-        string title;
-        uint particapant_number;
-        bool s_isfull;
-    }
+// If 1 ether = $3500, $5 = 0.001428 ether = 1.428 * 10^15
+
+contract SmartQA {
+    address public owner;
+    User[] public users;
+    string[] public accountNames;
+    Question[] public questions;
+
+    // State mappings
+    mapping(address => User) public userAddrMap;
+    mapping(address => bool) public hasRegistered;
+    mapping(uint256 => Question) public questionMap;
+    mapping(uint256 => Answer) public answerMap;
     
-    struct Question{
-        uint id;
+
+    // Models' ids.
+    uint256 public questionCount = 0;
+    uint256 public userCount = 0;
+    uint256 public answerCount = 0;
+    uint256 private balance = 0;
+    // Event declaration
+
+    // Structs for data models
+    struct Question {
+        address asker;
         string content;
-        string[] options;
-        bool q_isfull;
-    }
-    
-    struct Participant{
-        address p_address;
-        string name;
-        uint age;
-        bool isfull;
-    }
-    
-    struct Answer{
-        uint answer_id;
-        address who_participated;
-        uint survey_id;
-        string[] a_answer;
-        bool isSelected; 
+        uint256 reward;
+        uint256 expiration_time;
+        uint256 question_id;
+        bool closed;
+        uint256[] answer_ids;
     }
 
-    struct Endorsement{
-        uint endorsement_id;
-        address who_endorsed;
-        uint survey_id;
-        uint question_id; 
+    struct User {
+        string user_name;
+        address user_address;
     }
-    
-    
-    // ---------- Events for creating question, survey and participant ----------
-    event QuestionCreated(uint id, string _content, string[] answer);
-    event SurveyCreated(uint id, string _title, uint particapant_number, bool s_isfull);
-    event ParticipantCreated(address p_address, string name, uint age , bool isfull);
-    
-    // ---------- Mappings to save relevant data for Question, Survey, Participant, Answer, Endorsement ----------
-    mapping(uint => Question) public questions;
-    mapping(uint => Survey) public surveys;  
-    mapping(address => Participant) public participants;
-    mapping(uint => Answer) public answers;
-    mapping (uint => Endorsement) public endorsements; 
-    
-    // ---------- Mappings to save questions for survey, surveylist for participant, endorsements for question ----------
-    mapping(address => uint[]) public surveylist_of_participant;
-    mapping(uint => uint[]) public questions_of_anysurvey;
-    mapping (uint => uint[]) public endorsements_of_question;
-    
-    
-    constructor(){
+
+    struct Answer {
+        address answerer;
+        uint256 answer_id;
+        uint256 question_id;
+        string content;
+        bool isSelected;
+        address[] endorsers;
+    }
+
+    constructor() payable {
         owner = msg.sender;
+        balance = msg.value;
     }
-    
-    modifier ownerOnly {
-        require(msg.sender == owner, "You are not an owner.");
-        _;
-    }
-    
-    modifier joinedBefore(address _address, uint survey_id){
+    //  -------------------------------------------- events  --------------------------------------------
+    event QuestionCreated(
+        address asker,
+        string content,
+        uint256 reward,
+        uint256 expiration_time,
+        uint256 question_id,
+        bool closed,
+        uint256[] answer_ids
+    );
+
+    event UserRegistered(string username, address userAddress);
+    event AnswerCreated(
+        uint256 q_id,
+        uint256 a_id,
+        string content,
+        uint256 reward
+    );
+    event Endorse(uint256 a_id, address endorser, uint256 q_id);
+    event AnswerSelected(uint256 q_id, uint256 a_id);
+    event QuestionClosed(uint256 q_id);
+    event MoneyReceived(address payer, uint256 value);
+    event CheckExpiration(
+        uint256 curr_ts,
+        uint256 expiration_time,
+        bool isClosedByPoster
+    );
+    event RewardDistributed(
+        uint256 q_id,
+        uint256[] a_ids,
+        uint256[] receipients,
+        uint256 average_reward
+    );
+    //  -------------------------------------------- modifiers  --------------------------------------------
+    modifier isRegistered(address addr) {
         bool flag = true;
-        for(uint i = 0; i<surveylist_of_participant[_address].length; i++){
-            if(surveylist_of_participant[_address][i] == survey_id){
+        for (uint i = 0; i < userCount; i++) {
+            if (users[i].user_address == addr) {
                 flag = false;
             }
         }
-        require(flag, "You have already joined this survey before!");
+        require(flag, "The address was registered");
         _;
     }
-    
-    
-    
-    modifier createdQuestionBefore(string memory _content, string[] memory answer){
+
+    modifier isNameDuplicate(string memory name) {
         bool flag = true;
-        for(uint i = 0; i <= questionCount; i++){
-            if(keccak256(abi.encodePacked(questions[i].content)) == keccak256(abi.encodePacked(_content)) && answer.length ==  questions[i].options.length){
+        for (uint i = 0; i < userCount; i++) {
+            if (
+                keccak256(bytes(users[i].user_name)) == keccak256(bytes(name))
+            ) {
                 flag = false;
             }
         }
-        require(flag, "This question created before!");
-        _;
-    }   
-    
-    
-    
-    modifier createdSurveyBefore(string memory _title, uint[] memory QuestionId){
-        bool flag = true;
-        for(uint i = 0; i <= SurveyCount ; i++){
-            if(keccak256(abi.encodePacked(surveys[i].title)) == keccak256(abi.encodePacked(_title)) && QuestionId.length ==  questions_of_anysurvey[i].length){
-            flag = false;
-            }
-            }
-        require(flag, "This survey created before!");
+        require(flag, "The username is duplicate, please try another one");
         _;
     }
 
-    modifier endorsedBefore(address _address, uint QuestionId, uint AnswerId){
+    modifier isEndorsedBySameUser(address addr, uint256 answer_id) {
         bool flag = true;
-        // if {}
-        require(flag, "You have endorsed this answer before!"); 
-        _; 
+        for (uint i = 0; i < answerMap[answer_id].endorsers.length; i++) {
+            if (answerMap[answer_id].endorsers[i] == addr) {
+                flag = false;
+            }
+        }
+        require(flag, "You can only endorse the same question once");
+        _;
     }
-    
 
-    
-    // ---------- Creating functions ----------
-    function createQuestion(string memory _content, string[] memory answer) public ownerOnly createdQuestionBefore(_content,answer){
-        require(bytes(_content).length > 0 && answer.length>0, "Please Fill In The Blanks");
-        questions[questionCount] = Question(questionCount, _content, answer ,true);
-        emit QuestionCreated(questionCount, _content, answer);
-        questionCount++;
+    //  -------------------------------------------- Accesser  --------------------------------------------
+    function getUserQuestions(
+        address addr
+    ) public view returns (Question[] memory) {
+        Question[] memory userQuestions;
+        uint256 count = 0;
+        for (uint i = 1; i <= questionCount; i++) {
+            if (questionMap[i].asker == addr) {
+                userQuestions[count] = questionMap[i];
+                count++;
+            }
+        }
+        return userQuestions;
     }
-    
-    function createSurvey(string memory _title,uint[] memory Questionid) public ownerOnly createdSurveyBefore(_title, Questionid) returns(uint) {
-        require(bytes(_title).length > 0 && Questionid.length>0, "Please Fill In The Blanks");
-        questions_of_anysurvey[SurveyCount] = Questionid;
-        surveys[SurveyCount] = Survey(SurveyCount,_title, 0, true);
-        emit SurveyCreated(SurveyCount, _title, 0, true);
-        SurveyCount++;
-        survey_titles.push(_title);
-        return SurveyCount-1;
-
+    function getUserBalance(address addr) public view returns (uint256) {
+        return addr.balance;
     }
-    
-    function joinTheSurvey(uint survey_id, string[] memory answer) public joinedBefore(msg.sender, survey_id) {
-        require(answer.length>0, "Please Fill In The Blanks");
-        require(participants[msg.sender].isfull == true, "To join survey, you should log in first.");
-        require(surveys[survey_id].s_isfull == true, "Given survey id not found!");
-        Survey memory the_survey = surveys[survey_id];
-        bool isSelected = false; 
-        answers[AnswerCount] = Answer(AnswerCount, msg.sender, survey_id, answer, isSelected);
-        AnswerCount++;
-        surveylist_of_participant[msg.sender].push(survey_id);
-        the_survey.particapant_number +=1;
-
+    function getQuestion(
+        uint256 q_id
+    ) public view returns (string memory, uint256, uint256) {
+        // question content, reward, expiration time
+        // user should not call this
+        require(q_id <= questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        return (question.content, question.reward, question.expiration_time);
     }
-    
-    function createParticipant(string memory name, uint age) public{
-        require(bytes(name).length > 0 && age > 0, "Please Fill In The Blanks");
-        require(participants[msg.sender].isfull == false, "You don't have participant account / You can't create duplicate account.");
-        participants[msg.sender] = Participant(msg.sender, name, age, true);
-        emit ParticipantCreated(msg.sender, name, age ,true);
-        participant_list.push(msg.sender);
+    function getAnswers(uint256 a_id) public view returns (string memory) {
+        require(a_id <= answerCount, "The input answer id is invalid");
+        Answer memory answer = answerMap[a_id];
+        return (answer.content);
     }
-    
-    function EndorseAnswer(uint answer, uint QuestionId) public{
-        // endorsements_of_question.push();
+    function getNumOfEndorse(uint256 a_id) public view returns (uint256) {
+        require(a_id <= answerCount, "The input answer id is invalid");
+        Answer memory answer = answerMap[a_id];
+        return (answer.endorsers.length);
     }
-    
-    
-    // ---------- Getter functions ----------
-    
-    function getSurvey(uint id) public view returns (string memory title, uint[] memory _survayquestions){
-        Survey memory survey = surveys[id];
-        return (survey.title, questions_of_anysurvey[id]);
+    function isAnswerSelected(uint a_id) public view returns (bool) {
+        require(a_id <= answerCount, "The input answer id is invalid");
+        Answer memory answer = answerMap[a_id];
+        return answer.isSelected;
     }
-    
-    
-    function getQuestion(uint id) public view returns (string memory, string[] memory q_answers){
-        Question memory question = questions[id];
-        return (question.content,question.options);
+    function getDuration(uint256 q_id) public view returns (uint256) {
+        require(q_id <= questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        return (question.expiration_time);
     }
-    
-    function getParticipantCount() public view returns (uint){
-        return participant_list.length;
-    } 
-    
-    function getParticipantAddress() public view returns (address){
+    function getParticipantCount(uint256 q_id) public view returns (uint256) {
+        require(q_id <= questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        return question.answer_ids.length;
+    }
+    function getParticipantAddr() public view returns (address) {
         return msg.sender;
-    } 
+    }
+    function isExpired(uint256 q_id) public returns (bool) {
+        require(q_id <= questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        emit CheckExpiration(
+            block.timestamp,
+            question.expiration_time,
+            question.closed
+        );
+        return ((block.timestamp > question.expiration_time) ||
+            question.closed);
+    }
+    // ------------------------------------------- Update functions ----------------------------------------------
+    // todo 校验a_id, q_id 功能有问题 校验是否为poster answer id 是否归属于此question id
+    function selectAnswer(uint256 q_id, uint256 a_id, bool giveReward) public {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to select an answer"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can select the best answer"
+        );
+        require(
+            !questionMap[q_id].closed,
+            "The question has already been closed"
+            );
+        require(
+            answerMap[a_id].question_id == q_id,
+            "The answer does not belong to this question"
+        );    
+        uint256[] memory answerIds = questionMap[q_id].answer_ids;
+        for (uint256 i = 0; i < answerIds.length; i++) {
+            if (answerMap[answerIds[i]].isSelected == true) {
+                answerMap[answerIds[i]].isSelected = false;
+                break;
+            }
+        }
+        answerMap[a_id].isSelected = true;
+        if (giveReward) {
+            rewardDistributeByAssignedRecipent(q_id, answerMap[a_id].answerer);
+        }
+        emit AnswerSelected(q_id, a_id);
+    }
+
+    // 校验question id 是否存在，question是否属于此地址
+    function closeQuestion(uint256 q_id) public {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to close a question"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can close the question"
+        );
+        require(
+            !questionMap[q_id].closed,
+            "The question has already been closed"
+        );
+        //Check if the question_id is valid
+        require(q_id <= questionCount, "The input question id is invalid");
+        //Check if the question_id is belong to the user
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "The question does not belong to the user"
+        );
+        questionMap[q_id].closed = true;
+
+        emit QuestionClosed(q_id);
+    }
+    // ------------------------------------------- Create functions ----------------------------------------------
+    function registerUser(string memory _username) public {
+        require(bytes(_username).length > 0, "Username cannot be empty");
+        require(!hasRegistered[msg.sender], "Address already registered");
+
+        User memory newUser = User(_username, msg.sender);
+        users.push(newUser);
+        userAddrMap[msg.sender] = newUser;
+        accountNames.push(_username);
+        hasRegistered[msg.sender] = true;
+        userCount++;
+
+        emit UserRegistered(_username, msg.sender);
+    }
+
+    function askQuestion(
+        string memory _content,
+        uint256 _day,
+        uint256 _hour,
+        uint256 _min
+    ) external payable returns (uint256) {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to ask a question"
+        );
+        require(msg.value > 0, "Reward must be greater than 0");
+        require(bytes(_content).length > 0, "Question content cannot be empty");
     
-    function getSurveyCount() public view returns (uint){
-        return SurveyCount;
-    } 
-    
-    function getAnswer(uint a_id) public view returns (string[] memory ans){
-        ans = answers[a_id].a_answer;
-        return ans;
+        // require(
+        //     getUserBalance(msg.sender) > _reward,
+        //     "Reward higher than user balance"
+        // );
+
+
+        uint256 _expirationTime = _day * 86400 + _hour * 3600 + _min * 60;
+
+        require(_expirationTime > 86400, "Expiration time must be greater than 1 day");
+
+        uint256 question_id = ++questionCount;
+        Question memory newQuestion = Question(
+            msg.sender,
+            _content,
+            msg.value,
+            block.timestamp + _expirationTime,
+            question_id,
+            false,
+            new uint256[](0)
+        );
+        questions.push(newQuestion);
+        questionMap[question_id] = newQuestion;
+        emit MoneyReceived(msg.sender, msg.value);
+
+        return question_id;
+    }
+
+    // function deposite(uint expected_amount) external payable returns (bool) {
+    //     require(
+    //         hasRegistered[msg.sender],
+    //         "User must be registered to deposit"
+    //     );
+    //     if (msg.value > expected_amount) {
+    //         returnMoney(msg.sender, msg.value - expected_amount);
+    //         return false;
+    //     } else if (msg.value < expected_amount) {
+    //         returnMoney(msg.sender, msg.value);
+    //         return false;
+    //     }
+    //     return true;
+    // }
+
+    function returnMoney(address recipient, uint256 money) internal {
+        (bool r, ) = recipient.call{value: money}("");
+        require(r, "The money is not returned successfully");
+    }
+
+    function postAnswer(
+        // todo: 不能回答一个问题两次
+        uint256 question_id,
+        string memory content
+    ) public returns (uint256) {
+        require(!isExpired(question_id), "This question is closed");
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to answer a question"
+        );
+        require(bytes(content).length > 0, "Answer content cannot be empty");
+        require(
+            questionMap[question_id].asker != msg.sender,
+            "You cannot answer your own question!"
+        );
+        //check if the question_id is valid
+        require(question_id <= questionCount, "The input question id is invalid");
+        //check if user has already answered the question
+        for (uint i = 0; i < questionMap[question_id].answer_ids.length; i++) {
+            require(
+                answerMap[questionMap[question_id].answer_ids[i]].answerer !=
+                    msg.sender,
+                "You cannot answer the same question twice"
+            );
+        }
+
+        address[] memory endorsers;
+        uint256 answer_id = ++answerCount;
+        Answer memory newAnswer = Answer(
+            msg.sender,
+            answer_id,
+            question_id,
+            content,
+            false,
+            endorsers
+        );
+        answerMap[answer_id] = newAnswer;
+        questionMap[question_id].answer_ids.push(answer_id);
+        if (questionMap[question_id].answer_ids.length == 50) {
+            closeQuestion(question_id);
+        }
+
+        emit AnswerCreated(
+            question_id,
+            answer_id,
+            content,
+            questionMap[question_id].reward
+        );
+        return answer_id;
+    }
+
+    // todo: answer id 是否归属于此question
+    function endorse(uint256 answer_id, uint256 question_id) external {
+        require(!isExpired(question_id), "This question is closed");
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to add endorsements"
+        );
+        require(
+            questionMap[question_id].answer_ids.length > 0,
+            "There is no answer to endorse"
+        );
+        require(
+            answerMap[answer_id].answerer != msg.sender,
+            "You cannot endorse your own answer"
+        );
+        //check if the answer_id is valid
+        require(answer_id <= answerCount, "The input answer id is invalid");
+        //check if the answer_id is belong to the question_id
+        require(
+            answerMap[answer_id].question_id == question_id,
+            "The answer does not belong to the question"
+        );
+
+
+        address[] memory ansEndorsers = answerMap[answer_id].endorsers;
+        bool hasEndorsed = false;
+        for (uint i = 0; i < ansEndorsers.length; i++) {
+            if (ansEndorsers[i] == msg.sender) {
+                hasEndorsed = true;
+            }
+        }
+        require(!hasEndorsed, "User cannot endorse an answer twice");
+
+        emit Endorse(answer_id, msg.sender, question_id);
+        answerMap[answer_id].endorsers.push(msg.sender);
+    }
+    function rewardDistributeByAssignedRecipent(uint256 question_id, address recipient) private {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to distribute reward"
+        );
+        require(
+            questionMap[question_id].closed,
+            "The question has not been closed"
+        );
+        require(
+            questionMap[question_id].asker == msg.sender,
+            "Only the asker can distribute the reward"
+        );
+        uint256 reward = questionMap[question_id].reward;
+        (bool r, ) = recipient.call{value: reward}("");
+        require(r, "Failed to transfer the reward.");
+
+        // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
+    }
+    function rewardDistributeByExperitionTime(uint256 question_id, address[] memory recipients) private{
+        bool expired = isExpired(question_id);
+
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to distribute reward"
+        );
+        require(expired, "The question has not been expired");
+        require(
+            questionMap[question_id].closed,
+            "The question has not been closed"
+        );
+        require(
+            questionMap[question_id].asker == msg.sender,
+            "Only the asker can distribute the reward"
+        );
+        uint256 reward = questionMap[question_id].reward;
+        uint256 average_reward = reward / recipients.length;
+        for (uint i = 0; i < recipients.length; i++) {
+            (bool r, ) = recipients[i].call{value: average_reward}("");
+            require(r, "Failed to transfer the reward.");
+        }
+    }
+    // function check if two answers has same amount of endorsements
+    function checkEndorsement(uint256 q_id) public view returns (address[] memory) {
+    require(
+        hasRegistered[msg.sender],
+        "User must be registered to check endorsement"
+    );
+    require(
+        questionMap[q_id].closed,
+        "The question has not been closed"
+    );
+    require(
+        questionMap[q_id].asker == msg.sender,
+        "Only the asker can check the endorsement"
+    );
+
+    uint256[] memory answerIds = questionMap[q_id].answer_ids;
+    uint256 maxEndorsement = 0;
+
+    // First loop to find the maximum number of endorsements
+    for (uint i = 0; i < answerIds.length; i++) {
+        if (answerMap[answerIds[i]].endorsers.length > maxEndorsement) {
+            maxEndorsement = answerMap[answerIds[i]].endorsers.length;
+        }
+    }
+
+    // Count how many answers have the maximum endorsements
+    uint256 count = 0;
+    for (uint i = 0; i < answerIds.length; i++) {
+        if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
+            count++;
+        }
+    }
+
+    // Create a fixed-size array to hold the endorsers
+    address[] memory endorsers = new address[](count);
+    uint256 index = 0;
+
+    // Second loop to populate the endorsers array
+    for (uint i = 0; i < answerIds.length; i++) {
+        if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
+            endorsers[index] = answerMap[answerIds[i]].answerer;
+            index++;
+        }
+    }
+
+    return endorsers;
     }
     
-    function getQuestionCount() public view returns (uint){
-        return questionCount;
+
+    receive() external payable {
+        balance += msg.value;
     }
-    
-    function participantsJoinedSurveys(address _address) public view returns (uint[] memory data){
-        return surveylist_of_participant[_address];
-    }
-    
 }
