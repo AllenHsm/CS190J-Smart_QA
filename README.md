@@ -25,7 +25,7 @@ SmartQ&A is a blockchain based question and answering platform that allows users
 
 ## Installation
 
-SmartQ&A requires [Solidity](https://nodejs.org/) v0.8+ to run.
+SmartQ&A requires [Solidity](https://docs.soliditylang.org/en/v0.8.1/) v0.8+ to run.
 
 Run the tests
 
