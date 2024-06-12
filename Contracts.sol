@@ -216,7 +216,7 @@ contract SmartQA {
         }
         answerMap[a_id].isSelected = true;
         if (giveReward) {
-            rewardDistribute(q_id, answerMap[a_id].answerer);
+            rewardDistributeByAssignedRecipent(q_id, answerMap[a_id].answerer);
         }
         emit AnswerSelected(q_id, a_id);
     }
@@ -403,7 +403,7 @@ contract SmartQA {
         emit Endorse(answer_id, msg.sender, question_id);
         answerMap[answer_id].endorsers.push(msg.sender);
     }
-    function rewardDistribute(uint256 question_id, address recipient) private {
+    function rewardDistributeByAssignedRecipent(uint256 question_id, address recipient) private {
         require(
             hasRegistered[msg.sender],
             "User must be registered to distribute reward"
@@ -422,34 +422,77 @@ contract SmartQA {
 
         // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
     }
-    // function check if two answers has same amount of endorsements
-    function checkEndorsement(uint256 q_id) public view returns (bool) {
+    function rewardDistributeByExperitionTime(uint256 question_id, address[] memory recipients) private{
+        bool expired = isExpired(question_id);
+
         require(
             hasRegistered[msg.sender],
-            "User must be registered to check endorsement"
+            "User must be registered to distribute reward"
         );
+        require(expired, "The question has not been expired");
         require(
-            questionMap[q_id].closed,
+            questionMap[question_id].closed,
             "The question has not been closed"
         );
         require(
-            questionMap[q_id].asker == msg.sender,
-            "Only the asker can check the endorsement"
+            questionMap[question_id].asker == msg.sender,
+            "Only the asker can distribute the reward"
         );
-        uint256[] memory answerIds = questionMap[q_id].answer_ids;
-        for (uint256 i = 0; i < answerIds.length; i++) {
-            for (uint256 j = i + 1; j < answerIds.length; j++) {
-                if (
-                    answerMap[answerIds[i]].endorsers.length ==
-                    answerMap[answerIds[j]].endorsers.length
-                ) {
-                    return true;
-                }
-            }
+        uint256 reward = questionMap[question_id].reward;
+        uint256 average_reward = reward / recipients.length;
+        for (uint i = 0; i < recipients.length; i++) {
+            (bool r, ) = recipients[i].call{value: average_reward}("");
+            require(r, "Failed to transfer the reward.");
         }
-        return false;
+    }
+    // function check if two answers has same amount of endorsements
+    function checkEndorsement(uint256 q_id) public view returns (address[] memory) {
+    require(
+        hasRegistered[msg.sender],
+        "User must be registered to check endorsement"
+    );
+    require(
+        questionMap[q_id].closed,
+        "The question has not been closed"
+    );
+    require(
+        questionMap[q_id].asker == msg.sender,
+        "Only the asker can check the endorsement"
+    );
+
+    uint256[] memory answerIds = questionMap[q_id].answer_ids;
+    uint256 maxEndorsement = 0;
+
+    // First loop to find the maximum number of endorsements
+    for (uint i = 0; i < answerIds.length; i++) {
+        if (answerMap[answerIds[i]].endorsers.length > maxEndorsement) {
+            maxEndorsement = answerMap[answerIds[i]].endorsers.length;
+        }
     }
 
+    // Count how many answers have the maximum endorsements
+    uint256 count = 0;
+    for (uint i = 0; i < answerIds.length; i++) {
+        if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
+            count++;
+        }
+    }
+
+    // Create a fixed-size array to hold the endorsers
+    address[] memory endorsers = new address[](count);
+    uint256 index = 0;
+
+    // Second loop to populate the endorsers array
+    for (uint i = 0; i < answerIds.length; i++) {
+        if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
+            endorsers[index] = answerMap[answerIds[i]].answerer;
+            index++;
+        }
+    }
+
+    return endorsers;
+    }
+    
 
     receive() external payable {
         balance += msg.value;
