@@ -195,13 +195,18 @@ contract SmartQA {
             hasRegistered[msg.sender],
             "User must be registered to select an answer"
         );
-        require (
-            queationMap[q_id] == ;
-        );
         require(
             questionMap[q_id].asker == msg.sender,
             "Only the asker can select the best answer"
         );
+        require(
+            !questionMap[q_id].closed,
+            "The question has already been closed"
+            );
+        require(
+            answerMap[a_id].question_id == q_id,
+            "The answer does not belong to this question"
+        );    
         uint256[] memory answerIds = questionMap[q_id].answer_ids;
         for (uint256 i = 0; i < answerIds.length; i++) {
             if (answerMap[answerIds[i]].isSelected == true) {
@@ -229,6 +234,13 @@ contract SmartQA {
         require(
             !questionMap[q_id].closed,
             "The question has already been closed"
+        );
+        //Check if the question_id is valid
+        require(q_id <= questionCount, "The input question id is invalid");
+        //Check if the question_id is belong to the user
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "The question does not belong to the user"
         );
         questionMap[q_id].closed = true;
 
@@ -319,6 +331,17 @@ contract SmartQA {
             questionMap[question_id].asker != msg.sender,
             "You cannot answer your own question!"
         );
+        //check if the question_id is valid
+        require(question_id <= questionCount, "The input question id is invalid");
+        //check if user has already answered the question
+        for (uint i = 0; i < questionMap[question_id].answer_ids.length; i++) {
+            require(
+                answerMap[questionMap[question_id].answer_ids[i]].answerer !=
+                    msg.sender,
+                "You cannot answer the same question twice"
+            );
+        }
+
         address[] memory endorsers;
         uint256 answer_id = ++answerCount;
         Answer memory newAnswer = Answer(
@@ -359,6 +382,15 @@ contract SmartQA {
             answerMap[answer_id].answerer != msg.sender,
             "You cannot endorse your own answer"
         );
+        //check if the answer_id is valid
+        require(answer_id <= answerCount, "The input answer id is invalid");
+        //check if the answer_id is belong to the question_id
+        require(
+            answerMap[answer_id].question_id == question_id,
+            "The answer does not belong to the question"
+        );
+
+
         address[] memory ansEndorsers = answerMap[answer_id].endorsers;
         bool hasEndorsed = false;
         for (uint i = 0; i < ansEndorsers.length; i++) {
@@ -390,6 +422,34 @@ contract SmartQA {
 
         // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
     }
+    // function check if two answers has same amount of endorsements
+    function checkEndorsement(uint256 q_id) public view returns (bool) {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to check endorsement"
+        );
+        require(
+            questionMap[q_id].closed,
+            "The question has not been closed"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can check the endorsement"
+        );
+        uint256[] memory answerIds = questionMap[q_id].answer_ids;
+        for (uint256 i = 0; i < answerIds.length; i++) {
+            for (uint256 j = i + 1; j < answerIds.length; j++) {
+                if (
+                    answerMap[answerIds[i]].endorsers.length ==
+                    answerMap[answerIds[j]].endorsers.length
+                ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 
     receive() external payable {
         balance += msg.value;
