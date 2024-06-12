@@ -1,32 +1,73 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.1;
 
-import "./ReentrancyGuard.sol";
-import {SmartQA as ImportedSmartQA} from "./Contracts.sol";
-import {Test, console2} from "forge-std/Test.sol";
+import "forge-std/Test.sol";
+import {SmartQA} from "./Contracts.sol";
 
-contract SmartQA is Test {
-    ImportedSmartQA public smartQA;
-
+contract SmartQATest is Test {
+    SmartQA public smartQA;
     address public alice = address(0x1);
     address public bob = address(0x2);
     address public carol = address(0x3);
 
     function setUp() public {
-        smartQA = new ImportedSmartQA();
+        smartQA = new SmartQA();
+        deal(alice, 10 ether);
+
+        // register alice
+        vm.startPrank(alice);
+        smartQA.registerUser("alice");
+        vm.stopPrank();
+
+        // register bob
+        vm.startPrank(bob);
+        smartQA.registerUser("bob");
+        vm.stopPrank();
+
+        // register carol
+        vm.startPrank(carol);
+        smartQA.registerUser("carol");
+        vm.stopPrank();
+
+        // alice ask a question
+        vm.startPrank(alice);
+        smartQA.askQuestion("What is the meaning of life?", 1, 1, 2);
+        vm.stopPrank();
+
+        // bob answer the question
+        vm.startPrank(bob);
+        smartQA.postAnswer(1, "I think the meaning of life is being happy.");
+        vm.stopPrank();
+
+        // carol endorse the answer
+        vm.startPrank(carol);
+        smartQA.endorse(1, 1);
+        vm.stopPrank();
+
+        // alice accept the answer
+        
+
+
+
+
+
+
+
+
+
+
+
+        
+
+
+
+
+
     }
 
-    // Example test function
-    function testUserRegistration() public {
-        vm.prank(alice);
-        smartQA.registerUser("Alice");
-        bool isRegistered = smartQA.hasRegistered(alice);
-        assert(isRegistered);
-    }
     
 
-    // Additional test functions can be added here
+
+
 
 }
-
-

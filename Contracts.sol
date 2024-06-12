@@ -17,6 +17,7 @@ contract SmartQA {
     mapping(address => bool) public hasRegistered;
     mapping(uint256 => Question) public questionMap;
     mapping(uint256 => Answer) public answerMap;
+    
 
     // Models' ids.
     uint256 public questionCount = 0;
@@ -273,13 +274,18 @@ contract SmartQA {
         );
         require(msg.value > 0, "Reward must be greater than 0");
         require(bytes(_content).length > 0, "Question content cannot be empty");
+    
         // require(
         //     getUserBalance(msg.sender) > _reward,
         //     "Reward higher than user balance"
         // );
 
-        uint256 question_id = ++questionCount;
+
         uint256 _expirationTime = _day * 86400 + _hour * 3600 + _min * 60;
+
+        require(_expirationTime > 86400, "Expiration time must be greater than 1 day");
+
+        uint256 question_id = ++questionCount;
         Question memory newQuestion = Question(
             msg.sender,
             _content,
