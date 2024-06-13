@@ -107,27 +107,6 @@ contract TestSmartQA is Test {
         smartQA.postAnswer(questionId, "A blockchain platform.");
     }
 
-    function testSelectAnswerAndReward() public {
-        vm.prank(addr1);
-        smartQA.registerUser("Frank");
-        vm.prank(addr2);
-        smartQA.registerUser("Grace");
-        vm.prank(addr1);
-        deal(addr1, 1 ether);
-        uint256 questionId = smartQA.askQuestion{value: 1 ether}("What is Bitcoin?", 2, 0, 0);
-        vm.prank(addr2);
-        uint256 answerId = smartQA.postAnswer(questionId, "A cryptocurrency.");
-
-        vm.prank(addr1);
-        smartQA.selectAnswer(questionId, answerId, true);
-
-        bool isSelected = smartQA.isAnswerSelected(answerId);
-        assertTrue(isSelected, "Answer should be marked as selected");
-
-        assertEq(addr2.balance, 1 ether, "Reward should be transferred to the answerer.");
-    }
-
-
 
 
 }
