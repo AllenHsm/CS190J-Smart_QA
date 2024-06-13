@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.1;
 
-import "./ReentrancyGuard.sol";
 import {Test, console2} from "forge-std/Test.sol";
 
 // If 1 ether = $3500, $5 = 0.001428 ether = 1.428 * 10^15
@@ -238,11 +237,6 @@ contract SmartQA {
         );
         //Check if the question_id is valid
         require(q_id <= questionCount, "The input question id is invalid");
-        //Check if the question_id is belong to the user
-        require(
-            questionMap[q_id].asker == msg.sender,
-            "The question does not belong to the user"
-        );
         questionMap[q_id].closed = true;
 
         emit QuestionClosed(q_id);
@@ -283,7 +277,7 @@ contract SmartQA {
 
         uint256 _expirationTime = _day * 86400 + _hour * 3600 + _min * 60;
 
-        require(_expirationTime > 86400, "Expiration time must be greater than 1 day");
+        require(_expirationTime >= 86400, "Expiration time must be greater than 1 day");
 
         uint256 question_id = ++questionCount;
         Question memory newQuestion = Question(

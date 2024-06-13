@@ -32,8 +32,8 @@ Clone repository onto local machine `https://github.com/AllenHsm/CS190J-Smart_QA
 Run the tests
 
 ```sh
-xxxxxx
-xxxx
+forge build
+forge test -vvv
 xxxxx
 ```
 
