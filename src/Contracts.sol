@@ -4,7 +4,6 @@ pragma solidity ^0.8.1;
 import {Test, console2} from "forge-std/Test.sol";
 import {Queue} from "./Queue.sol";
 
-// If 1 ether = $3500, $5 = 0.001428 ether = 1.428 * 10^15
 
 contract SmartQA {
     address public owner;
@@ -76,11 +75,11 @@ contract SmartQA {
         string content,
         uint256 reward
     );
-    event Endorse(uint256 a_id, address endorser, uint256 q_id);
+    event Endorse (uint256 a_id, address endorser, uint256 q_id);
     event AnswerSelected(uint256 q_id, uint256 a_id);
-    event CancelSelection(uint256 q_id);
-    event QuestionClosed(uint256 q_id);
-    event MoneyReceived(address payer, uint256 value);
+    event CancelSelection (uint256 q_id);
+    event QuestionClosed (uint256 q_id);
+    event MoneyReceived (address payer, uint256 value);
     event CheckExpiration(
         uint256 curr_ts,
         uint256 expiration_time,
@@ -234,6 +233,9 @@ contract SmartQA {
         );
         if (block.timestamp > question.expiration_time) {
             questionMap[q_id].closed = true;
+            if (!questionMap[q_id].distributed) {
+                rewardDistribute(q_id, true);
+            }
         }
         return ((block.timestamp > question.expiration_time) ||
             question.closed);
@@ -335,11 +337,11 @@ contract SmartQA {
         hasRegistered[msg.sender] = true;
         userCount++;
 
-        Queue rewardHistory;
+        Queue rewardHistory = new Queue();
         for (uint256 i = 0; i < 5; i++){
             rewardHistory.enqueue(0.00447 ether);  // initialize the default reward history, such that the default credit is 0.01 ether
         }
-        rewardRecordsMap[msg.sender] = rewardHistory; 
+        rewardRecordsMap[msg.sender] = rewardHistory;
         emit UserRegistered(_username, msg.sender, 0.01 ether);
     }
 
@@ -362,6 +364,7 @@ contract SmartQA {
         uint256 _expirationTime = _day * 86400 + _hour * 3600 + _min * 60;
 
         require(_expirationTime >= 86400, "Expiration time must be greater than 1 day");
+        require(_expirationTime <= 604800, "Expiration time must be less than 7 days");
 
         uint256 question_id = ++questionCount;
         Question memory newQuestion = Question(
@@ -497,7 +500,7 @@ contract SmartQA {
             "Only the asker can distribute the reward"
         );
         require(
-            isExpired(question_id),
+            questionMap[question_id].closed,
             "The question has not been closed"
         );
         require(
@@ -511,7 +514,7 @@ contract SmartQA {
         if (isExpired(question_id)){
             questionMap[question_id].closed = true;
         }
-        if (questionMap[question_id].selected && isExpired(question_id)){
+        if (questionMap[question_id].selected && questionMap[question_id].closed){
             uint256 reward = questionMap[question_id].reward;
             address selectedAnswerer = getSelectedAnswerAddress(question_id);
             address[] memory selectedAnswer;
@@ -520,7 +523,7 @@ contract SmartQA {
             require(r, "Failed to transfer the reward."); 
             emit RewardDistributed(question_id, selectedAnswer);
             
-        }else if (isExpired(question_id) && !questionMap[question_id].selected && giveReward){
+        }else if (questionMap[question_id].closed && !questionMap[question_id].selected && giveReward){
             address[] memory recipients = checkEndorsement(question_id);
             rewardDistributeByExpirationTime(question_id, recipients);
             emit RewardDistributed(question_id, recipients);
