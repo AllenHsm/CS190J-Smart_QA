@@ -22,10 +22,10 @@ contract Queue {
         return last+1 - first;
     }
     function sqr_sum() public view returns (uint256 sum){
-        sum = 0; 
+        sum = 0;
         for (uint256 i = first; i < last+1; i++){
-            sum += queue[i] * queue[i]; 
+            sum += queue[i] * queue[i];
         }
-        return sum; 
+        return sum;
     }
 }

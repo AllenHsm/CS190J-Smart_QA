@@ -76,7 +76,7 @@ contract UserManagement {
             y = z;
             z = (x / z + z) / 2;
         }
-        return y; 
+        return y;
     }
 
     function getCredit(address userAddress) public view returns (uint256) {

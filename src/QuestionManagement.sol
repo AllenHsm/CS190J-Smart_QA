@@ -32,7 +32,7 @@ contract QuestionManagement is UserManagement {
     event QuestionClosed(uint256 q_id);
 
     function askQuestion(string memory _content, uint256 _day, uint256 _hour, uint256 _min) external payable returns (uint256) {
-        //UserManagement user; 
+        //UserManagement user;
         require(hasRegistered[msg.sender], "User not registered");
         require(msg.value > 0 && msg.value <= getCredit(msg.sender), "Reward must be greater than 0 and less than credit limit");
         require(bytes(_content).length > 0, "Question content is empty");
@@ -77,5 +77,6 @@ contract QuestionManagement is UserManagement {
         }
         return ((block.timestamp > question.expiration_time) || question.closed);
     }
+
     receive() external payable {}
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.1;
 
-import "./QuestionManagement.sol";
+import "src/QuestionManagement.sol";
 
 contract AnswerManagement is QuestionManagement {
     struct Answer {
