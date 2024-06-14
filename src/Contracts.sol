@@ -16,6 +16,7 @@ contract SmartQA {
     mapping(address => bool) public hasRegistered;
     mapping(uint256 => Question) public questionMap;
     mapping(uint256 => Answer) public answerMap;
+    mapping(address => uint256[5]) public records;
     
 
     // Models' ids.
@@ -32,6 +33,7 @@ contract SmartQA {
         uint256 reward;
         uint256 expiration_time;
         uint256 question_id;
+        bool selected;
         bool closed;
         uint256[] answer_ids;
     }
@@ -39,6 +41,7 @@ contract SmartQA {
     struct User {
         string user_name;
         address user_address;
+        uint256 credit;
     }
 
     struct Answer {
@@ -65,7 +68,7 @@ contract SmartQA {
         uint256[] answer_ids
     );
 
-    event UserRegistered(string username, address userAddress);
+    event UserRegistered(string username, address userAddress, uint256 default_credit);
     event AnswerCreated(
         uint256 q_id,
         uint256 a_id,
@@ -74,6 +77,7 @@ contract SmartQA {
     );
     event Endorse(uint256 a_id, address endorser, uint256 q_id);
     event AnswerSelected(uint256 q_id, uint256 a_id);
+    event CancelSelection(uint256 q_id);
     event QuestionClosed(uint256 q_id);
     event MoneyReceived(address payer, uint256 value);
     event CheckExpiration(
@@ -137,9 +141,7 @@ contract SmartQA {
         }
         return userQuestions;
     }
-    function getUserBalance(address addr) public view returns (uint256) {
-        return addr.balance;
-    }
+
     function getQuestion(
         uint256 q_id
     ) public view returns (string memory, uint256, uint256) {
@@ -188,6 +190,26 @@ contract SmartQA {
         return ((block.timestamp > question.expiration_time) ||
             question.closed);
     }
+    function getCredit(address userAddress) public view returns (uint256) {
+        return userAddrMap[userAddress].credit;
+        
+    }
+    function calculate_credit(uint256[] memory rewardHistory) public pure returns (uint256){
+        uint256 sqr_sum = 0; 
+        for (uint256 i = 0; i < rewardHistory.length; i++){
+            sqr_sum += (rewardHistory[i]) * (rewardHistory[i]); 
+        }
+        return sqrt(sqr_sum);
+    }
+    function sqrt(uint256 x)public pure returns (uint256 y) {    // Function From: https://ethereum.stackexchange.com/questions/2910/can-i-square-root-in-solidity
+        uint256 z = (x + 1) / 2;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+        return y; 
+    }
     // ------------------------------------------- Update functions ----------------------------------------------
     // todo 校验a_id, q_id 功能有问题 校验是否为poster answer id 是否归属于此question id
     function selectAnswer(uint256 q_id, uint256 a_id, bool giveReward) public {
@@ -208,17 +230,50 @@ contract SmartQA {
             "The answer does not belong to this question"
         );    
         uint256[] memory answerIds = questionMap[q_id].answer_ids;
-        for (uint256 i = 0; i < answerIds.length; i++) {
-            if (answerMap[answerIds[i]].isSelected == true) {
-                answerMap[answerIds[i]].isSelected = false;
-                break;
+        if (questionMap[q_id].selected) {
+            for (uint256 i = 0; i < answerIds.length; i++) {
+                if (answerMap[answerIds[i]].isSelected == true) {
+                    answerMap[answerIds[i]].isSelected = false;
+                    break;
+                }
             }
         }
+        questionMap[q_id].selected = true;
         answerMap[a_id].isSelected = true;
         if (giveReward) {
             rewardDistributeByAssignedRecipent(q_id, answerMap[a_id].answerer);
         }
         emit AnswerSelected(q_id, a_id);
+    }
+
+    function cancelSelection(uint256 q_id) public {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to cancel the selection of an answer"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can cancel the selection of the best answer"
+        );
+        require(
+            !questionMap[q_id].closed,
+            "The question has already been closed"
+            );
+        require(
+            questionMap[q_id].selected,
+            "No answer for this question has been selected"
+        );
+        uint256[] memory answerIds = questionMap[q_id].answer_ids;
+        if (questionMap[q_id].selected) {
+            for (uint256 i = 0; i < answerIds.length; i++) {
+                if (answerMap[answerIds[i]].isSelected == true) {
+                    answerMap[answerIds[i]].isSelected = false;
+                    break;
+                }
+            }
+        }
+        questionMap[q_id].selected = false;
+        emit CancelSelection(q_id);
     }
 
     // 校验question id 是否存在，question是否属于此地址
@@ -246,14 +301,14 @@ contract SmartQA {
         require(bytes(_username).length > 0, "Username cannot be empty");
         require(!hasRegistered[msg.sender], "Address already registered");
 
-        User memory newUser = User(_username, msg.sender);
+        User memory newUser = User(_username, msg.sender, 0.01 ether);
         users.push(newUser);
         userAddrMap[msg.sender] = newUser;
         accountNames.push(_username);
         hasRegistered[msg.sender] = true;
         userCount++;
 
-        emit UserRegistered(_username, msg.sender);
+        emit UserRegistered(_username, msg.sender, 0.01 ether);
     }
 
     function askQuestion(
@@ -286,6 +341,7 @@ contract SmartQA {
             msg.value,
             block.timestamp + _expirationTime,
             question_id,
+            false,
             false,
             new uint256[](0)
         );
@@ -492,8 +548,6 @@ contract SmartQA {
 
     return endorsers;
     }
-    
-
     receive() external payable {
         balance += msg.value;
     }
