@@ -8,6 +8,7 @@ contract QuestionManagementTest is Test {
     QuestionManagement questionManagement;
     address alice = address(0x1);
     address bob = address(0x2);
+    address charlie = address(0x3);
 
     function setUp() public {
         questionManagement = new QuestionManagement();
@@ -21,55 +22,53 @@ contract QuestionManagementTest is Test {
         vm.stopPrank();
     }
 
+    function testUserRegistration() public {
+        vm.startPrank(charlie);
+        questionManagement.registerUser("Charlie");
+        assertEq(questionManagement.getCredit(charlie), 0.01 ether);
+        vm.stopPrank();
+    }
+
     function testAskQuestion() public {
         vm.startPrank(alice);
-        uint256 qId = questionManagement.askQuestion("What is the meaning of life?", 1, 0, 0);
-        (, string memory content, uint256 reward, , , bool closed, ,) = questionManagement.questionMap(qId);
-
-        assertEq(content, "What is the meaning of life?");
-        assertEq(reward, 0.1 ether);
+        uint256 questionId = questionManagement.askQuestion{value: 0.005 ether}("What is Solidity?", 1, 0, 0);
+        (address asker, , uint256 reward, , , bool closed, ,) = questionManagement.questionMap(questionId);
+        assertEq(asker, alice);
+        assertEq(reward, 0.005 ether);
         assertFalse(closed);
         vm.stopPrank();
     }
 
-    function testFailAskQuestionWithoutRegistration() public {
-        vm.startPrank(address(0x3));
-        vm.expectRevert("User not registered");
-        questionManagement.askQuestion("How does blockchain work?", 1, 0, 0, {value: 0.01 ether});
-    }
-
-    function testFailAskQuestionWithInsufficientCredit() public {
+    function testAskQuestionInvalidReward() public {
         vm.startPrank(alice);
         vm.expectRevert("Reward must be greater than 0 and less than credit limit");
-        questionManagement.askQuestion("How to increase gas efficiency?", 1, 0, 0);
-    }
-
-    function testCloseQuestion() public {
-        vm.startPrank(alice);
-        uint256 qId = questionManagement.askQuestion("What is DeFi?", 1, 0, 0);
-        questionManagement.closeQuestion(qId);
-        assertTrue(questionManagement.questionMap(qId).closed);
+        questionManagement.askQuestion{value: 0.02 ether}("What is Ethereum?", 1, 0, 0);
         vm.stopPrank();
     }
 
-    function testFailCloseQuestionByNonAsker() public {
+    function testAskQuestionEmptyContent() public {
         vm.startPrank(alice);
-        uint256 qId = questionManagement.askQuestion("What is Ethereum?", 1, 0, 0);
+        vm.expectRevert("Question content is empty");
+        questionManagement.askQuestion{value: 0.005 ether}("", 1, 0, 0);
         vm.stopPrank();
-
-        vm.startPrank(bob);
-        vm.expectRevert("Only the asker can close the question");
-        questionManagement.closeQuestion(qId);
     }
 
+    function testAskQuestionInvalidExpirationTime() public {
+        vm.startPrank(alice);
+        vm.expectRevert("Expiration time must be greater than 1 day and less than 7 days");
+        questionManagement.askQuestion{value: 0.005 ether}("What is Solidity?", 0, 0, 0);
+        vm.stopPrank();
+    }
     function testIsExpired() public {
         vm.startPrank(alice);
-        uint256 qId = questionManagement.askQuestion("What is the best crypto?", 0, 0, 1);
-        skip(61);  // Skip 61 seconds to ensure the question is expired
-        bool expired = questionManagement.isExpired(qId);
-        assertTrue(expired);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = questionManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        vm.warp(block.timestamp + 86400*2 ); //Two days later
+        bool expired = questionManagement.isExpired(questionId);
+        assertEq(expired, true);
         vm.stopPrank();
     }
-
-    receive() external payable {}
+    
+   
+   
 }

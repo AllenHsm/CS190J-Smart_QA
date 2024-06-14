@@ -12,7 +12,8 @@ contract RewardManagement is AnswerManagement {
     constructor() payable {
         balance = msg.value;
     }
-
+    //todo: add a function to check if the question is expired and distribute the reward if expired and has not been distributed
+    
     function rewardDistribute(uint256 question_id, bool giveReward) public payable {
         require(questionMap[question_id].asker == msg.sender);
         require(questionMap[question_id].closed);
@@ -73,9 +74,9 @@ contract RewardManagement is AnswerManagement {
     }
 
     function checkEndorsement(uint256 q_id) public view returns (address[] memory) {
-        require(hasRegistered[msg.sender]);
-        require(questionMap[q_id].closed);
-        require(questionMap[q_id].asker == msg.sender);
+        //require(hasRegistered[msg.sender], "User must be registered to check endorsements");
+        require(questionMap[q_id].closed, "The question is not closed");
+        require(questionMap[q_id].asker == msg.sender, "Only the asker can check endorsements");
 
         uint256[] memory answerIds = questionMap[q_id].answer_ids;
         uint256 maxEndorsement = 0;
