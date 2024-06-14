@@ -2,6 +2,7 @@
 pragma solidity ^0.8.1;
 
 import {Test, console2} from "forge-std/Test.sol";
+import {Queue} from "./Queue.sol";
 
 // If 1 ether = $3500, $5 = 0.001428 ether = 1.428 * 10^15
 
@@ -16,7 +17,7 @@ contract SmartQA {
     mapping(address => bool) public hasRegistered;
     mapping(uint256 => Question) public questionMap;
     mapping(uint256 => Answer) public answerMap;
-    mapping(address => uint256[5]) public rewardRecordsMap;
+    mapping(address => Queue) public rewardRecordsMap;
     
 
     // Models' ids.
@@ -34,6 +35,7 @@ contract SmartQA {
         uint256 question_id;
         bool selected;
         bool closed;
+        bool distributed;
         uint256[] answer_ids;
     }
 
@@ -86,9 +88,7 @@ contract SmartQA {
     );
     event RewardDistributed(
         uint256 q_id,
-        uint256[] a_ids,
-        uint256[] receipients,
-        uint256 average_reward
+        address[] recipients
     );
     event UserCreditUpdate(
         address user_addr,
@@ -155,6 +155,18 @@ contract SmartQA {
         Question memory question = questionMap[q_id];
         return (question.content, question.reward, question.expiration_time);
     }
+    function getSelectedAnswerAddress(uint256 q_id) private view returns (address) {
+        require(q_id <= questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        uint256[] memory answerIds = question.answer_ids;
+        for (uint256 i = 0; i < answerIds.length; i++) {
+            if (answerMap[answerIds[i]].isSelected) {
+                return answerMap[answerIds[i]].answerer;
+            }
+        }
+        return address(0);
+    }
+
     function getAnswers(uint256 a_id) public view returns (string memory) {
         require(a_id <= answerCount, "The input answer id is invalid");
         Answer memory answer = answerMap[a_id];
@@ -183,30 +195,25 @@ contract SmartQA {
     function getParticipantAddr() public view returns (address) {
         return msg.sender;
     }
-    function isExpired(uint256 q_id) public returns (bool) {
-        require(q_id <= questionCount, "The input question id is invalid");
-        Question memory question = questionMap[q_id];
-        emit CheckExpiration(
-            block.timestamp,
-            question.expiration_time,
-            question.closed
-        );
-        return ((block.timestamp > question.expiration_time) ||
-            question.closed);
-    }
+    
     function getCredit(address userAddress) private view returns (uint256) {
         return userAddrMap[userAddress].credit;
     }
-    function calculate_credit(address userAddress) returns (uint256){
-        uint256 sqr_sum = 0;
-        uint256[] rewardHistory = rewardRecordsMap[userAddress];
-        for (uint256 i = 0; i < 5; i++){
-            sqr_sum += (rewardHistory[i]) * (rewardHistory[i]);
-        }
+    function getMyCredit() public view returns (uint256) {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to get credit"
+        );
+        return getCredit(msg.sender);
+    }
+
+    // ------------------------------------------- Helper functions ----------------------------------------------
+    function calculate_credit(address userAddress) public returns (uint256){
+        uint256 sqr_sum = rewardRecordsMap[userAddress].sqr_sum(); 
         emit UserCreditUpdate(userAddress, getCredit(userAddress), sqr_sum);
         return sqrt(sqr_sum);
     }
-    function sqrt(uint256 x) pure returns (uint256 y) {    // Function From: https://ethereum.stackexchange.com/questions/2910/can-i-square-root-in-solidity
+    function sqrt(uint256 x) public pure returns (uint256 y) {    // Function From: https://ethereum.stackexchange.com/questions/2910/can-i-square-root-in-solidity
         uint256 z = (x + 1) / 2;
         y = x;
         while (z < y) {
@@ -216,7 +223,26 @@ contract SmartQA {
         return y; 
     }
     // ------------------------------------------- Update functions ----------------------------------------------
-    function selectAnswer(uint256 q_id, uint256 a_id, bool giveReward) public {
+
+    function isExpired(uint256 q_id) public returns (bool) {
+        require(q_id <= questionCount, "The input question id is invalid");
+        Question memory question = questionMap[q_id];
+        emit CheckExpiration(
+            block.timestamp,
+            question.expiration_time,
+            question.closed
+        );
+        if (block.timestamp > question.expiration_time) {
+            questionMap[q_id].closed = true;
+        }
+        return ((block.timestamp > question.expiration_time) ||
+            question.closed);
+    }
+
+    function selectAnswer(uint256 q_id, uint256 a_id) public{
+        if (isExpired(q_id)){
+            questionMap[q_id].closed = true;
+        }
         require(
             hasRegistered[msg.sender],
             "User must be registered to select an answer"
@@ -226,7 +252,7 @@ contract SmartQA {
             "Only the asker can select the best answer"
         );
         require(
-            !questionMap[q_id].closed,
+            !isExpired(q_id),
             "The question has already been closed"
             );
         require(
@@ -244,9 +270,6 @@ contract SmartQA {
         }
         questionMap[q_id].selected = true;
         answerMap[a_id].isSelected = true;
-        if (giveReward) {
-            rewardDistributeByAssignedRecipent(q_id, answerMap[a_id].answerer);
-        }
         emit AnswerSelected(q_id, a_id);
     }
 
@@ -260,7 +283,7 @@ contract SmartQA {
             "Only the asker can cancel the selection of the best answer"
         );
         require(
-            !questionMap[q_id].closed,
+            !isExpired(q_id),
             "The question has already been closed"
             );
         require(
@@ -291,7 +314,7 @@ contract SmartQA {
             "Only the asker can close the question"
         );
         require(
-            !questionMap[q_id].closed,
+            !isExpired(q_id),
             "The question has already been closed"
         );
         //Check if the question_id is valid
@@ -312,20 +335,12 @@ contract SmartQA {
         hasRegistered[msg.sender] = true;
         userCount++;
 
-        uint256[5] memory rewardHistory;
-        for (int i = 0; i < 5; i++){
-            rewardHistory[i] = 0.00447 ether;  // initialize the default reward history, such that the default credit is 0.01 ether
+        Queue rewardHistory;
+        for (uint256 i = 0; i < 5; i++){
+            rewardHistory.enqueue(0.00447 ether);  // initialize the default reward history, such that the default credit is 0.01 ether
         }
         rewardRecordsMap[msg.sender] = rewardHistory; 
         emit UserRegistered(_username, msg.sender, 0.01 ether);
-    }
-
-    function getMyCredit() public returns (uint256) {
-        require(
-            hasRegistered[msg.sender],
-            "User must be registered to get credit"
-        );
-        return getCredit(msg.sender);
     }
 
     function askQuestion(
@@ -355,6 +370,7 @@ contract SmartQA {
             msg.value,
             block.timestamp + _expirationTime,
             question_id,
+            false,
             false,
             false,
             new uint256[](0)
@@ -387,7 +403,6 @@ contract SmartQA {
     }
 
     function postAnswer(
-        // todo: 不能回答一个问题两次
         uint256 question_id,
         string memory content
     ) public returns (uint256) {
@@ -439,6 +454,9 @@ contract SmartQA {
 
     // todo: answer id 是否归属于此question
     function endorse(uint256 answer_id, uint256 question_id) external {
+        if (isExpired(question_id)){
+            questionMap[question_id].closed = true;
+        }
         require(!isExpired(question_id), "This question is closed");
         require(
             hasRegistered[msg.sender],
@@ -473,26 +491,71 @@ contract SmartQA {
         emit Endorse(answer_id, msg.sender, question_id);
         answerMap[answer_id].endorsers.push(msg.sender);
     }
-    function rewardDistributeByAssignedRecipent(uint256 question_id, address recipient) private {
-        require(
-            hasRegistered[msg.sender],
-            "User must be registered to distribute reward"
-        );
-        require(
-            questionMap[question_id].closed,
-            "The question has not been closed"
-        );
+    function rewardDistribute(uint256 question_id, bool giveReward) public payable{
         require(
             questionMap[question_id].asker == msg.sender,
             "Only the asker can distribute the reward"
         );
-        uint256 reward = questionMap[question_id].reward;
-        (bool r, ) = recipient.call{value: reward}("");
-        require(r, "Failed to transfer the reward.");
-
-        // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
+        require(
+            isExpired(question_id),
+            "The question has not been closed"
+        );
+        require(
+            questionMap[question_id].distributed == false,
+            "The reward has already been distributed"
+        );
+        require(
+            questionMap[question_id].selected && !giveReward,
+            "The reward must be distributed to the selected answerer"
+        );
+        if (isExpired(question_id)){
+            questionMap[question_id].closed = true;
+        }
+        if (questionMap[question_id].selected && isExpired(question_id)){
+            uint256 reward = questionMap[question_id].reward;
+            address selectedAnswerer = getSelectedAnswerAddress(question_id);
+            address[] memory selectedAnswer;
+            selectedAnswer[0] = selectedAnswerer;
+            (bool r, ) = selectedAnswerer.call{value: reward}("");
+            require(r, "Failed to transfer the reward."); 
+            emit RewardDistributed(question_id, selectedAnswer);
+            
+        }else if (isExpired(question_id) && !questionMap[question_id].selected && giveReward){
+            address[] memory recipients = checkEndorsement(question_id);
+            rewardDistributeByExpirationTime(question_id, recipients);
+            emit RewardDistributed(question_id, recipients);
+        }
+        //update the reward history
+        Queue rewardHistory = rewardRecordsMap[msg.sender];
+        rewardHistory.dequeue();
+        rewardHistory.enqueue(questionMap[question_id].reward);
+        rewardRecordsMap[msg.sender] = rewardHistory;
+        calculate_credit(msg.sender);
     }
-    function rewardDistributeByExperitionTime(uint256 question_id, address[] memory recipients) private{
+       // emit RewardDistributed(question_id, answerIds, average_reward);
+    
+
+    // function rewardDistributeByAssignedRecipent(uint256 question_id, address recipient) private {
+    //     require(
+    //         hasRegistered[msg.sender],
+    //         "User must be registered to distribute reward"
+    //     );
+    //     require(
+    //         questionMap[question_id].closed,
+    //         "The question has not been closed"
+    //     );
+    //     require(
+    //         questionMap[question_id].asker == msg.sender,
+    //         "Only the asker can distribute the reward"
+    //     );
+    //     uint256 reward = questionMap[question_id].reward;
+    //     (bool r, ) = recipient.call{value: reward}("");
+    //     require(r, "Failed to transfer the reward.");
+        
+
+    //     // todo: emit RewardDistributed(q_id, a_ids, recipients, average_reward);
+    // }
+    function rewardDistributeByExpirationTime(uint256 question_id, address[] memory recipients) private{
         bool expired = isExpired(question_id);
 
         require(
@@ -517,50 +580,50 @@ contract SmartQA {
     }
     // function check if two answers has same amount of endorsements
     function checkEndorsement(uint256 q_id) public view returns (address[] memory) {
-    require(
-        hasRegistered[msg.sender],
-        "User must be registered to check endorsement"
-    );
-    require(
-        questionMap[q_id].closed,
-        "The question has not been closed"
-    );
-    require(
-        questionMap[q_id].asker == msg.sender,
-        "Only the asker can check the endorsement"
-    );
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to check endorsement"
+        );
+        require(
+            questionMap[q_id].closed,
+            "The question has not been closed"
+        );
+        require(
+            questionMap[q_id].asker == msg.sender,
+            "Only the asker can check the endorsement"
+        );
 
-    uint256[] memory answerIds = questionMap[q_id].answer_ids;
-    uint256 maxEndorsement = 0;
+        uint256[] memory answerIds = questionMap[q_id].answer_ids;
+        uint256 maxEndorsement = 0;
 
-    // First loop to find the maximum number of endorsements
-    for (uint i = 0; i < answerIds.length; i++) {
-        if (answerMap[answerIds[i]].endorsers.length > maxEndorsement) {
-            maxEndorsement = answerMap[answerIds[i]].endorsers.length;
+        // First loop to find the maximum number of endorsements
+        for (uint i = 0; i < answerIds.length; i++) {
+            if (answerMap[answerIds[i]].endorsers.length > maxEndorsement) {
+                maxEndorsement = answerMap[answerIds[i]].endorsers.length;
+            }
         }
-    }
 
-    // Count how many answers have the maximum endorsements
-    uint256 count = 0;
-    for (uint i = 0; i < answerIds.length; i++) {
-        if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
-            count++;
+        // Count how many answers have the maximum endorsements
+        uint256 count = 0;
+        for (uint i = 0; i < answerIds.length; i++) {
+            if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
+                count++;
+            }
         }
-    }
 
-    // Create a fixed-size array to hold the endorsers
-    address[] memory endorsers = new address[](count);
-    uint256 index = 0;
+        // Create a fixed-size array to hold the endorsers
+        address[] memory endorsers = new address[](count);
+        uint256 index = 0;
 
-    // Second loop to populate the endorsers array
-    for (uint i = 0; i < answerIds.length; i++) {
-        if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
-            endorsers[index] = answerMap[answerIds[i]].answerer;
-            index++;
+        // Second loop to populate the endorsers array
+        for (uint i = 0; i < answerIds.length; i++) {
+            if (answerMap[answerIds[i]].endorsers.length == maxEndorsement) {
+                endorsers[index] = answerMap[answerIds[i]].answerer;
+                index++;
+            }
         }
-    }
 
-    return endorsers;
+        return endorsers;
     }
     receive() external payable {
         balance += msg.value;
