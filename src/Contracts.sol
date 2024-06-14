@@ -16,7 +16,7 @@ contract SmartQA {
     mapping(address => bool) public hasRegistered;
     mapping(uint256 => Question) public questionMap;
     mapping(uint256 => Answer) public answerMap;
-    mapping(address => uint256[5]) public records;
+    mapping(address => uint256[5]) public rewardRecordsMap;
     
 
     // Models' ids.
@@ -24,7 +24,6 @@ contract SmartQA {
     uint256 public userCount = 0;
     uint256 public answerCount = 0;
     uint256 private balance = 0;
-    // Event declaration
 
     // Structs for data models
     struct Question {
@@ -91,6 +90,11 @@ contract SmartQA {
         uint256[] receipients,
         uint256 average_reward
     );
+    event UserCreditUpdate(
+        address user_addr,
+        uint256 prev_credit,
+        uint256 new_credit
+    ); 
     //  -------------------------------------------- modifiers  --------------------------------------------
     modifier isRegistered(address addr) {
         bool flag = true;
@@ -190,18 +194,19 @@ contract SmartQA {
         return ((block.timestamp > question.expiration_time) ||
             question.closed);
     }
-    function getCredit(address userAddress) public view returns (uint256) {
+    function getCredit(address userAddress) private view returns (uint256) {
         return userAddrMap[userAddress].credit;
-        
     }
-    function calculate_credit(uint256[] memory rewardHistory) public pure returns (uint256){
-        uint256 sqr_sum = 0; 
-        for (uint256 i = 0; i < rewardHistory.length; i++){
-            sqr_sum += (rewardHistory[i]) * (rewardHistory[i]); 
+    function calculate_credit(address userAddress) returns (uint256){
+        uint256 sqr_sum = 0;
+        uint256[] rewardHistory = rewardRecordsMap[userAddress];
+        for (uint256 i = 0; i < 5; i++){
+            sqr_sum += (rewardHistory[i]) * (rewardHistory[i]);
         }
+        emit UserCreditUpdate(userAddress, getCredit(userAddress), sqr_sum);
         return sqrt(sqr_sum);
     }
-    function sqrt(uint256 x)public pure returns (uint256 y) {    // Function From: https://ethereum.stackexchange.com/questions/2910/can-i-square-root-in-solidity
+    function sqrt(uint256 x) pure returns (uint256 y) {    // Function From: https://ethereum.stackexchange.com/questions/2910/can-i-square-root-in-solidity
         uint256 z = (x + 1) / 2;
         y = x;
         while (z < y) {
@@ -211,7 +216,6 @@ contract SmartQA {
         return y; 
     }
     // ------------------------------------------- Update functions ----------------------------------------------
-    // todo 校验a_id, q_id 功能有问题 校验是否为poster answer id 是否归属于此question id
     function selectAnswer(uint256 q_id, uint256 a_id, bool giveReward) public {
         require(
             hasRegistered[msg.sender],
@@ -308,7 +312,20 @@ contract SmartQA {
         hasRegistered[msg.sender] = true;
         userCount++;
 
+        uint256[5] memory rewardHistory;
+        for (int i = 0; i < 5; i++){
+            rewardHistory[i] = 0.00447 ether;  // initialize the default reward history, such that the default credit is 0.01 ether
+        }
+        rewardRecordsMap[msg.sender] = rewardHistory; 
         emit UserRegistered(_username, msg.sender, 0.01 ether);
+    }
+
+    function getMyCredit() public returns (uint256) {
+        require(
+            hasRegistered[msg.sender],
+            "User must be registered to get credit"
+        );
+        return getCredit(msg.sender);
     }
 
     function askQuestion(
@@ -317,18 +334,15 @@ contract SmartQA {
         uint256 _hour,
         uint256 _min
     ) external payable returns (uint256) {
+
         require(
             hasRegistered[msg.sender],
             "User must be registered to ask a question"
         );
         require(msg.value > 0, "Reward must be greater than 0");
+        require(msg.value <= getCredit(msg.sender), "Reward must be less than or equal to your current credit");
         require(bytes(_content).length > 0, "Question content cannot be empty");
     
-        // require(
-        //     getUserBalance(msg.sender) > _reward,
-        //     "Reward higher than user balance"
-        // );
-
 
         uint256 _expirationTime = _day * 86400 + _hour * 3600 + _min * 60;
 
