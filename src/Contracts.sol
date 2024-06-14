@@ -306,7 +306,8 @@ contract SmartQA {
     }
 
     // 校验question id 是否存在，question是否属于此地址
-    function closeQuestion(uint256 q_id) public {
+    function closeQuestion(uint256 q_id,bool giveReward) public {
+
         require(
             hasRegistered[msg.sender],
             "User must be registered to close a question"
@@ -322,6 +323,8 @@ contract SmartQA {
         //Check if the question_id is valid
         require(q_id <= questionCount, "The input question id is invalid");
         questionMap[q_id].closed = true;
+        rewardDistribute(q_id, giveReward);
+
 
         emit QuestionClosed(q_id);
     }
@@ -443,7 +446,7 @@ contract SmartQA {
         answerMap[answer_id] = newAnswer;
         questionMap[question_id].answer_ids.push(answer_id);
         if (questionMap[question_id].answer_ids.length == 50) {
-            closeQuestion(question_id);
+            closeQuestion(question_id,true);
         }
 
         emit AnswerCreated(
