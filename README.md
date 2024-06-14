@@ -34,7 +34,6 @@ Run the tests
 ```sh
 forge build
 forge test -vvv
-xxxxx
 ```
 
 ## License
