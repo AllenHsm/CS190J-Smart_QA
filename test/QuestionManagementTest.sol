@@ -22,13 +22,7 @@ contract QuestionManagementTest is Test {
         vm.stopPrank();
     }
 
-    function testUserRegistration() public {
-        vm.startPrank(charlie);
-        questionManagement.registerUser("Charlie");
-        assertEq(questionManagement.getCredit(charlie), 0.01 ether);
-        vm.stopPrank();
-    }
-
+    // Test the askQuestion function
     function testAskQuestion() public {
         vm.startPrank(alice);
         uint256 questionId = questionManagement.askQuestion{value: 0.005 ether}("What is Solidity?", 1, 0, 0);
@@ -38,27 +32,28 @@ contract QuestionManagementTest is Test {
         assertFalse(closed);
         vm.stopPrank();
     }
-
+    // Test the askQuestion function with invalid reward
     function testAskQuestionInvalidReward() public {
         vm.startPrank(alice);
         vm.expectRevert("Reward must be greater than 0 and less than credit limit");
         questionManagement.askQuestion{value: 0.02 ether}("What is Ethereum?", 1, 0, 0);
         vm.stopPrank();
     }
-
+    // Test the askQuestion function with empty content
     function testAskQuestionEmptyContent() public {
         vm.startPrank(alice);
-        vm.expectRevert("Question content is empty");
+        vm.expectRevert("Question cannot be empty");
         questionManagement.askQuestion{value: 0.005 ether}("", 1, 0, 0);
         vm.stopPrank();
     }
-
+    // Test the askQuestion function with invalid expiration time
     function testAskQuestionInvalidExpirationTime() public {
         vm.startPrank(alice);
         vm.expectRevert("Expiration time must be greater than 1 day and less than 7 days");
         questionManagement.askQuestion{value: 0.005 ether}("What is Solidity?", 0, 0, 0);
         vm.stopPrank();
     }
+    // Test IsExpired function
     function testIsExpired() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -68,7 +63,6 @@ contract QuestionManagementTest is Test {
         assertEq(expired, true);
         vm.stopPrank();
     }
-    
-   
-   
+
+
 }

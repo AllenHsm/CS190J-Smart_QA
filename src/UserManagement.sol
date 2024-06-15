@@ -2,8 +2,9 @@
 pragma solidity ^0.8.1;
 
 import {Queue} from "./Queue.sol";
+import {ReentrancyGuard} from "ReentrancyGuard.sol";
 
-contract UserManagement {
+contract UserManagement is ReentrancyGuard {
     address public owner;
     User[] public users;
     string[] public accountNames;
@@ -45,7 +46,7 @@ contract UserManagement {
     }
 
     function registerUser(string memory _username) public isRegistered(msg.sender) isNameDuplicate(_username) {
-        require(bytes(_username).length > 0, "Username cannot be empty");
+        require(bytes(_username).length > 0, "Username is empty");
 
         User memory newUser = User(_username, msg.sender, 0.01 ether);
         users.push(newUser);
@@ -80,14 +81,10 @@ contract UserManagement {
     }
 
     function getCredit(address userAddress) public view returns (uint256) {
-        return userAddrMap[userAddress].credit;
-    }
-
-    function getMyCredit() public view returns (uint256) {
         require(
-            hasRegistered[msg.sender],
+            hasRegistered[userAddress],
             "User must be registered to get credit"
         );
-        return userAddrMap[msg.sender].credit;
+        return userAddrMap[userAddress].credit;
     }
 }

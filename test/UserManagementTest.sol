@@ -17,6 +17,7 @@ contract UserManagementTest is Test {
         vm.deal(bob, 1 ether);
         vm.deal(charlie, 1 ether);
     }
+    // Test the registerUser function
     function testRegisterUser() public {
 
         vm.prank(alice);
@@ -27,6 +28,7 @@ contract UserManagementTest is Test {
         assertEq(userAddress, alice);
         assertEq(credit, 0.01 ether);
     }
+    // Test the user with duplicated names
     function testUserWithDuplicatedNames() public {
         vm.prank(alice);
         userManagement.registerUser("Alice");
@@ -39,9 +41,9 @@ contract UserManagementTest is Test {
         assertEq(userAddress, address(0));
         assertEq(credit, 0);
     }
-
+    // Test the user with empty username
     function testEmptyUsername() public {
-        vm.expectRevert(bytes("Username cannot be empty"));
+        vm.expectRevert(bytes("Username is empty"));
         vm.prank(alice);
         userManagement.registerUser("");
         (string memory username, address userAddress, uint256 credit) = userManagement.userAddrMap(alice);
@@ -49,7 +51,7 @@ contract UserManagementTest is Test {
         assertEq(userAddress, address(0));
         assertEq(credit, 0);
     }
-
+    // Test the user with invalid username
     function testCreditUpdate() public {
         vm.prank(bob);
         userManagement.registerUser("Bob");

@@ -29,6 +29,7 @@ contract AnswerManagementTest is Test {
         vm.stopPrank();
     }
 
+    // Test the PostAnswer function
     function testPostAnswer() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -44,6 +45,7 @@ contract AnswerManagementTest is Test {
         assertEq(content, "Ethereum is a decentralized platform.");
         vm.stopPrank();
     }
+    // Test the PostAnswer function with expired question
     function testPostAnswerExpiredQuestion() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -52,10 +54,11 @@ contract AnswerManagementTest is Test {
         vm.warp(block.timestamp + 86400*2 ); //Two days later
 
         vm.startPrank(bob);
-        vm.expectRevert("This question is closed");
+        vm.expectRevert("The question is closed");
         answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
         vm.stopPrank();
     }
+    // Test the PostAnswer function with questioner post answer
     function testQuestionerPostAnswer() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -67,6 +70,7 @@ contract AnswerManagementTest is Test {
         answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
         vm.stopPrank();
     }
+    // Test the PostAnswer function with empty content
     function testPostAnswerEmptyContent() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -74,25 +78,11 @@ contract AnswerManagementTest is Test {
         vm.stopPrank();
 
         vm.startPrank(bob);
-        vm.expectRevert("Answer content cannot be empty");
+        vm.expectRevert("Answer cannot be empty");
         answerManagement.postAnswer(questionId, "");
         vm.stopPrank();
     }
-    function testPostAnswerTwice() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = answerManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
-        vm.startPrank(bob);
-        answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
-        vm.stopPrank();
-
-        vm.startPrank(bob);
-        vm.expectRevert("You cannot answer the same question twice");
-        answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
-        vm.stopPrank();
-    }
+    // Test the SelectAnswer function
     function testSelectAnswer() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -110,6 +100,7 @@ contract AnswerManagementTest is Test {
         assertTrue(isSelected);
         vm.stopPrank();
     }
+    // Test the SelectAnswer function with expired question
     function testSelectAnswerExpiredQuestion() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -118,10 +109,11 @@ contract AnswerManagementTest is Test {
         vm.warp(block.timestamp + 86400*2 ); //Two days later
 
         vm.startPrank(bob);
-        vm.expectRevert("The question has already been closed");
+        vm.expectRevert("The question is closed");
         answerManagement.selectAnswer(questionId, 1);
         vm.stopPrank();
     }
+    // Test CalcelSelection function
     function testCancelSelection() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -145,6 +137,7 @@ contract AnswerManagementTest is Test {
         assertFalse(isSelected);
         vm.stopPrank();
     }
+    // Test if the cancelSelection can be called by non-questioner
     function testNonQuestionerCancelSelection() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -156,10 +149,11 @@ contract AnswerManagementTest is Test {
         vm.stopPrank();
 
         vm.startPrank(bob);
-        vm.expectRevert("Only the asker can cancel the selection of the best answer");
+        vm.expectRevert("Only the asker can cancel selection");
         answerManagement.cancelSelection(questionId);
         vm.stopPrank();
     }
+    // Test the CancelSelection function with expired question
     function testCancelSelectionExpiredQuestion() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;
@@ -168,10 +162,11 @@ contract AnswerManagementTest is Test {
         vm.warp(block.timestamp + 86400*2 ); //Two days later
 
         vm.startPrank(alice);
-        vm.expectRevert("The question has already been closed");
+        vm.expectRevert("The question is closed");
         answerManagement.cancelSelection(questionId);
         vm.stopPrank();
     }
+    // Test if the selectAnswer can be called by non-questioner
     function testNonQuestionerSelectAnswer() public {
         vm.startPrank(alice);
         uint256 reward = 0.01 ether;

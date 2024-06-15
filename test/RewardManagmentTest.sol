@@ -12,7 +12,7 @@ contract RewardManagementTest is Test {
     address dave = address(0x4);
 
     function setUp() public {
-        rewardManagement = new RewardManagement{value: 10 ether}();
+        rewardManagement = new RewardManagement();
         vm.deal(alice, 1 ether);
         vm.deal(bob, 1 ether);
         vm.deal(charlie, 1 ether);
@@ -33,157 +33,121 @@ contract RewardManagementTest is Test {
         vm.startPrank(dave);
         rewardManagement.registerUser("Dave");
         vm.stopPrank();
-
-        
     }
 
-    function testRewardDistributionToSelectedAnswer() public {
+    function testRewardDistributeByExpirationTime() public {
         vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        uint256 question_id = rewardManagement.askQuestion{value: 0.01 ether}("What is Ethereum?", 1, 0, 0);
         vm.stopPrank();
-
-        vm.startPrank(bob);
-        uint256 answerId = rewardManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
-        vm.stopPrank();
-
-        vm.startPrank(alice);
-        rewardManagement.selectAnswer(questionId, answerId);
-        rewardManagement.closeQuestion(questionId);
-        rewardManagement.rewardDistribute(questionId, true);
         
-        // Assert that reward is distributed to the selected answerer
-        (, , , , , , bool distributed, ) = rewardManagement.questionMap(questionId);
-        assertEq(distributed, true);
-        vm.stopPrank();
-    }
-
-    function testRewardDistributionToEndorsedAnswer() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
         vm.startPrank(bob);
-        uint256 answerId = rewardManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
+        uint256 answer_id = rewardManagement.postAnswer(question_id, "Ethereum is a decentralized platform.");
         vm.stopPrank();
-
+        
         vm.startPrank(charlie);
-        rewardManagement.endorse(questionId, answerId);
+        rewardManagement.endorse(answer_id, question_id);
         vm.stopPrank();
 
+        vm.warp(block.timestamp + 86400*2); //Two days later
+
+        vm.startPrank(bob);
+        rewardManagement.rewardDistributeByExpirationTime(question_id);
+        vm.stopPrank();
+
+        assertEq(address(bob).balance, 1.01 ether);
+        assertEq(address(alice).balance, 0.99 ether);
+    }
+
+    function testRewardDistributeWithMultipleAnswers() public {
         vm.startPrank(alice);
-        rewardManagement.closeQuestion(questionId);
-        rewardManagement.rewardDistribute(questionId, true);
+        uint256 question_id = rewardManagement.askQuestion{value: 0.01 ether}("What is Ethereum?", 1, 0, 0);
+        vm.stopPrank();
         
-        // Assert that reward is distributed to the endorsed answerer
-        (, , , , , , bool distributed, ) = rewardManagement.questionMap(questionId);
-        assertEq(distributed, true);
-        vm.stopPrank();
-    }
-    function testRewardDistributionByExpirationTime() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
-        vm.warp(block.timestamp + 86400*2); // Two days later
-
-        vm.startPrank(alice);
-        rewardManagement.closeQuestion(questionId);
-        rewardManagement.rewardDistribute(questionId, true);
-
-        // Assert that reward is distributed to the asker
-        (, , , , , , bool distributed, ) = rewardManagement.questionMap(questionId);
-        assertEq(distributed, true);
-        vm.stopPrank();
-    }
-    function testRewardDistributionWithoutSelection() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
         vm.startPrank(bob);
-        uint256 answerId = rewardManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
+        uint256 answer_id = rewardManagement.postAnswer(question_id, "Ethereum is a decentralized platform.");
         vm.stopPrank();
-
-        vm.startPrank(alice);
-        rewardManagement.closeQuestion(questionId);
-        rewardManagement.rewardDistribute(questionId, false);
-
-        // Assert that reward is distributed to the asker
-        (, , , , , , bool distributed, ) = rewardManagement.questionMap(questionId);
-        assertEq(distributed, true);
-        vm.stopPrank();
-    }
-    function testCreditCalculation() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
-        vm.startPrank(bob);
-        uint256 answerId = rewardManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
-        vm.stopPrank();
-
-        vm.startPrank(alice);
-        rewardManagement.selectAnswer(questionId, answerId);
-        rewardManagement.closeQuestion(questionId);
-        rewardManagement.rewardDistribute(questionId, true);
-        vm.stopPrank();
-
-        // Assert that credit is calculated for the asker
-        assertEq(rewardManagement.getCredit(alice), 13413560302917342);
-    }
-    function testCreditCalculationWithoutGivingReward() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
-        vm.startPrank(bob);
-        uint256 answerId = rewardManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
-        vm.stopPrank();
-
-        vm.startPrank(alice);
-        rewardManagement.closeQuestion(questionId);
-        rewardManagement.rewardDistribute(questionId, false);
-        vm.stopPrank();
-
-        // Assert that credit is calculated for the asker
-        assertEq(rewardManagement.getCredit(alice), 8940000000000000);
-    }
-    function testCheckEndorsement() public {
-        vm.startPrank(alice);
-        uint256 reward = 0.01 ether;
-        uint256 questionId = rewardManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
-        vm.stopPrank();
-
-        vm.startPrank(bob);
-
-        uint256 answerId = rewardManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
-        vm.stopPrank();
-
+        
         vm.startPrank(charlie);
-
-        rewardManagement.endorse(questionId, answerId);
+        rewardManagement.endorse(answer_id, question_id);
         vm.stopPrank();
 
         vm.startPrank(dave);
-        rewardManagement.endorse(questionId, answerId);
+        uint256 answer_id2 = rewardManagement.postAnswer(question_id, "Ethereum is a decentralized platform.");
+        vm.stopPrank();
+        
+        vm.startPrank(charlie);
+        rewardManagement.endorse(answer_id2, question_id);
         vm.stopPrank();
 
-        
+        vm.warp(block.timestamp + 86400*2); //Two days later
 
+        vm.startPrank(bob);
+        rewardManagement.rewardDistributeByExpirationTime(question_id);
+        vm.stopPrank();
+
+        assertEq(address(bob).balance, 1.005 ether);
+        assertEq(address(alice).balance, 0.99 ether);
+        assertEq(address(dave).balance, 1.005 ether);
         
+    }
+    function testFailRewardDistributionWithNoAnswer() public {
         vm.startPrank(alice);
-        rewardManagement.closeQuestion(questionId);
-        address[] memory recipients = rewardManagement.checkEndorsement(questionId);
-        assertEq(recipients.length, 2);
-        assertEq(recipients[0], charlie);
-        assertEq(recipients[1], dave);
+        uint256 question_id = rewardManagement.askQuestion{value: 0.01 ether}("What is Ethereum?", 1, 0, 0);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 86400*2); //Two days later
+
+        vm.startPrank(alice);
+        rewardManagement.rewardDistributeByExpirationTime(question_id);
+
+        vm.stopPrank();
+        vm.assertEq(address(alice).balance, 1 ether);
+    }
+
+    function testFailRewardDistributionBeforeExpiration() public {
+        vm.startPrank(alice);
+        uint256 question_id = rewardManagement.askQuestion{value: 0.01 ether}("What is a smart contract?", 1, 0, 0);
+        vm.expectRevert("The question is not closed");
+
+        rewardManagement.rewardDistributeByExpirationTime(question_id);
         vm.stopPrank();
     }
 
+    function testRewardDistributionWithSelectedAnswer() public {
+        vm.startPrank(alice);
+        uint256 question_id = rewardManagement.askQuestion{value: 0.01 ether}("What is DeFi?", 1, 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        uint256 answer_id = rewardManagement.postAnswer(question_id, "Decentralized Finance");
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        rewardManagement.selectAnswer(question_id, answer_id);
+        rewardManagement.closeQuestion(question_id, true);
+        vm.stopPrank();
+
+        assertEq(address(bob).balance, 1.01 ether);
+        assertEq(rewardManagement.getCredit(alice), 13413560302917342);
+    }
+
+    function testRewardDistributionWithoutGive() public {
+        vm.startPrank(alice);
+        uint256 question_id = rewardManagement.askQuestion{value: 0.01 ether}("What is DeFi?", 1, 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        uint256 answer_id = rewardManagement.postAnswer(question_id, "Decentralized Finance");
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        rewardManagement.closeQuestion(question_id, false);
+        vm.stopPrank();
+
+        assertEq(address(alice).balance, 1.00 ether);
+        assertEq(address(bob).balance, 1.00 ether);
+        
+    }
+
+    receive() external payable {}
 }
