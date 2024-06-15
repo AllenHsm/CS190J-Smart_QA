@@ -21,8 +21,8 @@ contract RewardManagement is AnswerManagement {
     }
 
     function rewardDistribute(uint256 question_id, bool giveReward) private  {
-        require(isExpired(question_id), "2 4");
-        require(!questionMap[question_id].distributed, "2 5");
+        require(isExpired(question_id));
+        require(!questionMap[question_id].distributed);
         if (questionMap[question_id].selected){
             require(giveReward, "If you select the best answer, you have to give out reward"); 
         }
@@ -31,7 +31,7 @@ contract RewardManagement is AnswerManagement {
             address selectedAnswerer = getSelectedAnswerAddress(question_id);
             address[] memory selectedAnswer = new address[](1);
             selectedAnswer[0] = selectedAnswerer;
-            require(address(this).balance >= reward, "3 4");
+            require(address(this).balance >= reward);
             (bool r, ) = selectedAnswerer.call{value: reward}("");
             require(r, "Reward distribution failed ");
             questionMap[question_id].distributed = true;
@@ -63,9 +63,9 @@ contract RewardManagement is AnswerManagement {
             address selectedAnswerer = getSelectedAnswerAddress(question_id);
             address[] memory selectedAnswer = new address[](1);
             selectedAnswer[0] = selectedAnswerer;
-            require(address(this).balance >= reward, "6 6");
+            require(address(this).balance >= reward);
             (bool r, ) = selectedAnswerer.call{value: reward}("");
-            require(r,"Reward distribution failed 68");
+            require(r,"Reward distribution failed");
             questionMap[question_id].distributed = true;
             emit RewardDistributed(question_id, selectedAnswer);
         }
@@ -82,12 +82,11 @@ contract RewardManagement is AnswerManagement {
                 for (uint i = 0; i < recipients.length; i++) {
                 require(address(this).balance >= average_reward);
                 (bool r, ) = recipients[i].call{value: average_reward}("");
-                require(r,"Reward distribution failed 85");
+                require(r,"Reward distribution failed");
                 questionMap[question_id].distributed = true;
                 }
             emit RewardDistributed(question_id, recipients);
             }
-          
         }
     }
 

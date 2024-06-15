@@ -178,8 +178,8 @@ contract RewardManagementTest is Test {
         rewardManagement.closeQuestion(question_id, false);
         vm.stopPrank();
 
-        assertEq(address(alice).balance, 1.00 ether);
-        assertEq(address(bob).balance, 1.00 ether);
+        assertEq(address(alice).balance, 1 ether);
+        assertEq(address(bob).balance, 1 ether);
     }
 
     receive() external payable {}
