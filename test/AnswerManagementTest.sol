@@ -182,4 +182,51 @@ contract AnswerManagementTest is Test {
         answerManagement.selectAnswer(questionId, answerId);
         vm.stopPrank();
     }
+    //Test getAnswerID function
+    function testGetAnswerID() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = answerManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        uint256 answerId = answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
+        vm.stopPrank();
+
+        uint256[] memory answerIds = answerManagement.getAnswerID(questionId);
+        assertEq(answerIds[0], answerId);
+    }
+    //Test getAnswerContent function
+    function testGetAnswerContent() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = answerManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        uint256 answerId = answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
+        vm.stopPrank();
+
+        string memory content = answerManagement.getAnswerContent(answerId);
+        assertEq(content, "Ethereum is a decentralized platform.");
+    }
+    //Test getNumberOfEndorsements function
+    function testGetNumberOfEndorsements() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = answerManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        uint256 answerId = answerManagement.postAnswer(questionId, "Ethereum is a decentralized platform.");
+        vm.stopPrank();
+
+        vm.startPrank(charlie);
+        answerManagement.endorse(answerId, questionId);
+        vm.stopPrank();
+
+        uint256 numberOfEndorsements = answerManagement.getNumberOfEndorsements(answerId);
+        assertEq(numberOfEndorsements, 1);
+    }
+    
 }

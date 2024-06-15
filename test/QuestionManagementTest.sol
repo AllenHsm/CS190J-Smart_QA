@@ -64,5 +64,33 @@ contract QuestionManagementTest is Test {
         vm.stopPrank();
     }
 
+    //Test getQuestion Content function
+    function testGetQuestionContent() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = questionManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        string memory content = questionManagement.getQuestionContent(questionId);
+        assertEq(content, "What is Ethereum?");
+        vm.stopPrank();
+    }
+    // Test getQuestionReward function
+    function testGetQuestionReward() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = questionManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        uint256 rewardget = questionManagement.getQuestionReward(questionId);
+        assertEq(rewardget, 0.01 ether);
+        vm.stopPrank();
+    }
+    // Test getQuestionExpirationTime function
+    function testGetQuestionExpirationTime() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = questionManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        uint expirationTime = questionManagement.getQuestionExpirationTime(questionId);
+        assertEq(expirationTime, block.timestamp + 86400);
+        vm.stopPrank();
+    }
+
 
 }

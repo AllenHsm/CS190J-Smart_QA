@@ -97,4 +97,14 @@ contract AnswerManagement is QuestionManagement {
         questionMap[q_id].selected = false;
         emit CancelSelection(q_id);
     }
+    function getAnswerID(uint256 q_id) public view returns(uint256[] memory){
+        return questionMap[q_id].answer_ids;
+    }
+    function getAnswerContent(uint256 a_id) public view returns(string memory){
+        return answerMap[a_id].content;
+    }
+    function getNumberOfEndorsements(uint256 a_id) public view returns(uint256){
+        return answerMap[a_id].endorsers.length;
+    }
+
 }
