@@ -56,8 +56,8 @@ contract RewardManagement is AnswerManagement {
 
     function rewardDistributeByExpirationTime(uint256 question_id) public nonReentrant {
         require(hasRegistered[msg.sender], "The address is not registered");
-        require(isExpired(question_id), "5 9");
-        require(!questionMap[question_id].distributed, "6 0");
+        require(isExpired(question_id));
+        require(!questionMap[question_id].distributed);
         uint256 reward = questionMap[question_id].reward;
         if (questionMap[question_id].selected) {
             address selectedAnswerer = getSelectedAnswerAddress(question_id);
@@ -77,15 +77,17 @@ contract RewardManagement is AnswerManagement {
                 questionMap[question_id].distributed = true;
                 emit RewardDistributed(question_id, recipients);
                 return;
-            }
-            uint256 average_reward = reward / recipients.length;
-            for (uint i = 0; i < recipients.length; i++) {
+            }else{
+                uint256 average_reward = reward / recipients.length;
+                for (uint i = 0; i < recipients.length; i++) {
                 require(address(this).balance >= average_reward);
                 (bool r, ) = recipients[i].call{value: average_reward}("");
                 require(r,"Reward distribution failed 85");
                 questionMap[question_id].distributed = true;
-            }
+                }
             emit RewardDistributed(question_id, recipients);
+            }
+          
         }
     }
 
