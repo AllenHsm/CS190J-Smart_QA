@@ -27,7 +27,7 @@ SmartQ&A is a blockchain based question and answering platform that allows users
 
 SmartQ&A requires [Solidity](https://docs.soliditylang.org/en/v0.8.1/) v0.8+ to run.
 
-Clone repository onto local machine `https://github.com/AllenHsm/CS190J-Smart_QA.git`
+Clone repository onto local machine `git clone https://github.com/AllenHsm/CS190J-Smart_QA.git`
 
 Run the tests
 
