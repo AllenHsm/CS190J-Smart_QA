@@ -91,6 +91,15 @@ contract QuestionManagementTest is Test {
         assertEq(expirationTime, block.timestamp + 86400);
         vm.stopPrank();
     }
+    // Test getQuestionCurrentID function
+    function testGetQuestionCurrentID() public {
+        vm.startPrank(alice);
+        uint256 reward = 0.01 ether;
+        uint256 questionId = questionManagement.askQuestion{value: reward}("What is Ethereum?", 1, 0, 0);
+        uint currentID = questionManagement.getQuestionCurrentID();
+        assertEq(currentID, 1);
+        vm.stopPrank();
+    }
 
 
 }

@@ -82,6 +82,9 @@ contract QuestionManagement is UserManagement {
         require(q_id <= questionCount, "The input question id is invalid");
         return questionMap[q_id].expiration_time;
     }
+    function getQuestionCurrentID() public view returns (uint256) {
+        return questionCount;
+    }
 
     receive() external payable {}
 }
